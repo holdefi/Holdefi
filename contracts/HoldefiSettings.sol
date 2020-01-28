@@ -175,6 +175,11 @@ contract HoldefiSettings is Ownable {
 	// Owner can add a new asset as a market.
 	function addMarket (address market, uint borrowRate, uint suppliersShareRate) external onlyOwner {
 		require(!marketAssets[market].isActive, "Market exists");
+		require (borrowRate <= maxBorrowRate
+			&& suppliersShareRate >= minSuppliersShareRate
+			&& suppliersShareRate <= ratesDecimal
+			, 'Rate should be in allowed range');
+		
 		marketAssets[market].isActive = true;
 		marketAssets[market].borrowRate = borrowRate;
 		marketAssets[market].borrowRateUpdateTime = block.timestamp;
