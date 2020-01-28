@@ -1,0 +1,21 @@
+{
+  "name": "Holdefi_Contracts",
+  "version": "1.0.0",
+  "description": "Holdefi_Contracts",
+  "repository": {
+    "private": true
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "HoldefiCo",
+  "license": "ISC",
+  "dependencies": {
+    "bignumber.js": "^9.0.0",
+    "truffle-security": "^1.6.2"
+  },
+  "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.4"
+  }
+}

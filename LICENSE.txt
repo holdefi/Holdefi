@@ -1,0 +1,3 @@
+The software, source codes and documentation available in this repository (the "Software") are protected by copyright law. Copyright © 2020 Holdefi, Inc. All rights reserved.
+
+Holdefi retains all rights to the Software and no one can reproduce, distribute, or create derivative from the Software. Holdefi prohibits using the Software for commercial use or any other purpose.
