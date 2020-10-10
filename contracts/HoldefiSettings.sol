@@ -19,9 +19,9 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	using SafeMath for uint256;
 
-	uint constant public ratesDecimal = 10 ** 4;
+	uint constant public rateDecimals = 10 ** 4;
 
-	uint constant public secondsPerTenDays = 864000;
+	uint constant public periodBetweenUpdates = 864000;
 
 	uint constant public maxBorrowRate = 4000;				  //40%
 
@@ -40,7 +40,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	uint constant public penaltyRateMaxIncrease = 500; 		  //5%
 
 	// Markets Features 
-	struct Market {
+	struct MarketSettings {
 		bool isActive;
 
 		uint borrowRate;
@@ -51,7 +51,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	}
 
 	// Collaterals Features
-	struct Collateral {
+	struct CollateralSettings {
 		bool isActive;
 		uint valueToLoanRate;   // Collateral liquidation threshold
 		uint VTLUpdateTime;
@@ -61,11 +61,11 @@ contract HoldefiSettings is HoldefiOwnable {
 	}
 
 	// Asset address => Market features 
-	mapping (address => Market) public marketAssets;
+	mapping (address => MarketSettings) public marketAssets;
 	address[] public marketsList;
 
 	// Asset address => Collateral features
-	mapping (address => Collateral) public collateralAssets;
+	mapping (address => CollateralSettings) public collateralAssets;
 
 	HoldefiInterface public holdefiContract;
 
@@ -87,7 +87,7 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	event BonusRateChanged(address collateral, uint newRate);
 	
-	constructor (address newOwnerChanger) HoldefiOwnable(newOwnerChanger) public {
+	constructor (address ownerChanger) HoldefiOwnable(ownerChanger) public {
 	}
 
 	// Disposable function to Get in touch with Holdefi contract
@@ -107,7 +107,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		else {
 			uint totalInterestFromBorrow = totalBorrow.mul(borrowRate);
 			uint suppliersShare = totalInterestFromBorrow.mul(suppliersShareRate);
-			suppliersShare = suppliersShare.div(ratesDecimal);
+			suppliersShare = suppliersShare.div(rateDecimals);
 			supplyRate = suppliersShare.div(totalSupply);
 		}
 	}
@@ -118,7 +118,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	}
 
 	// Returns true if an asset is in the market list
-	function getMarket(address market) external view returns (bool active){
+	function isMarketActive(address market) external view returns (bool active){
 		active = marketAssets[market].isActive;
 	}
 
@@ -139,7 +139,7 @@ contract HoldefiSettings is HoldefiOwnable {
 
 		if (newBorrowRate > marketAssets[market].borrowRate){
 			uint deltaTime = currentTime.sub(marketAssets[market].borrowRateUpdateTime);
-			require (deltaTime >= secondsPerTenDays,'Increasing rate is not allowed at this time');
+			require (deltaTime >= periodBetweenUpdates,'Increasing rate is not allowed at this time');
 			uint maxIncrease = marketAssets[market].borrowRate.add(borrowRateMaxIncrease);
 			require (newBorrowRate <= maxIncrease,'Rate should be increased less than max allowed');
 		}
@@ -155,12 +155,12 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	// Owner can set a new 'suppliers share rate' (Supplier's share of borrower's interest).
 	function setSuppliersShareRate (address market, uint newSuppliersShareRate) external onlyOwner {
-		require (newSuppliersShareRate >= minSuppliersShareRate && newSuppliersShareRate <= ratesDecimal,'Rate should be in allowed range');
+		require (newSuppliersShareRate >= minSuppliersShareRate && newSuppliersShareRate <= rateDecimals,'Rate should be in allowed range');
 		uint currentTime = block.timestamp;
 
 		if (newSuppliersShareRate < marketAssets[market].suppliersShareRate) {
 			uint deltaTime = currentTime.sub(marketAssets[market].suppliersShareRateUpdateTime);
-			require (deltaTime >= secondsPerTenDays,'Decreasing rate is not allowed at this time');
+			require (deltaTime >= periodBetweenUpdates,'Decreasing rate is not allowed at this time');
 			uint maxDecrease = marketAssets[market].suppliersShareRate.sub(suppliersShareRateMaxDecrease);
 			require (newSuppliersShareRate >= maxDecrease,'Rate should be decreased less than max allowed');
 		}
@@ -178,7 +178,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		require(!marketAssets[market].isActive, "Market exists");
 		require (borrowRate <= maxBorrowRate
 			&& suppliersShareRate >= minSuppliersShareRate
-			&& suppliersShareRate <= ratesDecimal
+			&& suppliersShareRate <= rateDecimals
 			, 'Rate should be in allowed range');
 		
 		marketAssets[market].isActive = true;
@@ -215,7 +215,7 @@ contract HoldefiSettings is HoldefiOwnable {
 				&& penaltyRate <= maxPenaltyRate
 				&& penaltyRate <= valueToLoanRate
 				&& bonusRate <= penaltyRate
-				&& bonusRate >= ratesDecimal
+				&& bonusRate >= rateDecimals
 			,'Rate should be in allowed range');
 		
 		collateralAssets[collateralAsset].isActive = true;
@@ -243,7 +243,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		uint currentTime = block.timestamp;
 		if (newValueToLoanRate > collateralAssets[collateralAsset].valueToLoanRate) {
 			uint deltaTime = currentTime.sub(collateralAssets[collateralAsset].VTLUpdateTime);
-			require (deltaTime >= secondsPerTenDays,'Increasing rate is not allowed at this time');
+			require (deltaTime >= periodBetweenUpdates,'Increasing rate is not allowed at this time');
 			uint maxIncrease = collateralAssets[collateralAsset].valueToLoanRate.add(valueToLoanRateMaxIncrease);
 			require (newValueToLoanRate <= maxIncrease,'Rate should be increased less than max allowed');
 		}
@@ -263,7 +263,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		uint currentTime = block.timestamp;
 		if (newPenaltyRate > collateralAssets[collateralAsset].penaltyRate){
 			uint deltaTime = currentTime.sub(collateralAssets[collateralAsset].penaltyUpdateTime);
-			require (deltaTime >= secondsPerTenDays,'Increasing rate is not allowed at this time');
+			require (deltaTime >= periodBetweenUpdates,'Increasing rate is not allowed at this time');
 			uint maxIncrease = collateralAssets[collateralAsset].penaltyRate.add(penaltyRateMaxIncrease);
 			require (newPenaltyRate <= maxIncrease,'Rate should be increased less than max allowed');
 		}
@@ -276,7 +276,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	// Owner can set bonus rate for each collateral asset
 	function setBonusRate (address collateralAsset, uint newBonusRate) external onlyOwner {
 		require (newBonusRate <= collateralAssets[collateralAsset].penaltyRate
-				&& newBonusRate >= ratesDecimal
+				&& newBonusRate >= rateDecimals
 				,'Rate should be in allowed range');
 		
 	    collateralAssets[collateralAsset].bonusRate = newBonusRate;

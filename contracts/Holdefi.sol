@@ -13,7 +13,7 @@ interface HoldefiPricesInterface {
 // File: contracts/HoldefiSettings.sol
 interface HoldefiSettingsInterface {
 	function getInterests(address market, uint totalSupply, uint totalBorrow) external view returns(uint borrowRate, uint supplyRate);
-	function getMarket(address market) external view returns(bool isActive);
+	function isMarketActive(address market) external view returns(bool isActive);
 	function getCollateral(address collateral) external view returns(bool isActive, uint valueToLoanRate, uint penaltyRate, uint bonusRate);
 	function getMarketsList() external view returns(address[] memory marketsList);
 }
@@ -38,10 +38,10 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-	// All rates in this contract are scaled by ratesDecimal.
-	uint constant public ratesDecimal = 10 ** 4;
+	// All rates in this contract are scaled by rateDecimals.
+	uint constant public rateDecimals = 10 ** 4;
 
-	// All Indexes in this contract are scaled by (secondsPerYear * ratesDecimal) 
+	// All Indexes in this contract are scaled by (secondsPerYear * rateDecimals) 
 	uint constant public secondsPerYear = 31536000;
 
 	uint constant public maxPromotionRate = 3000;
@@ -49,17 +49,17 @@ contract Holdefi is HoldefiPausableOwnable {
 	// Markets are assets that can be supplied and borrowed
 	struct Market {
 		uint totalSupply;
-		uint supplyIndex;      //Scaled by: secondsPerYear * ratesDecimal
+		uint supplyIndex;      //Scaled by: secondsPerYear * rateDecimals
 		uint supplyIndexUpdateTime;
 
 		uint totalBorrow;
-		uint borrowIndex;      //Scaled by: secondsPerYear * ratesDecimal
+		uint borrowIndex;      //Scaled by: secondsPerYear * rateDecimals
 		uint borrowIndexUpdateTime;
 
 		uint promotionRate;
-		uint promotionReserveScaled; //Scaled by: secondsPerYear * ratesDecimal
+		uint promotionReserveScaled; //Scaled by: secondsPerYear * rateDecimals
 		uint promotionReserveLastUpdateTime;
-		uint promotionDebtScaled;    //Scaled by: secondsPerYear * ratesDecimal
+		uint promotionDebtScaled;    //Scaled by: secondsPerYear * rateDecimals
 		uint promotionDebtLastUpdateTime;
 	}
 
@@ -73,7 +73,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	struct MarketAccount {
 		uint balance;
 		uint accumulatedInterest; 
-		uint lastInterestIndex; //Scaled by: secondsPerYear * ratesDecimal
+		uint lastInterestIndex; //Scaled by: secondsPerYear * rateDecimals
 	}
 	// Users profile for each collateral
 	struct CollateralAccount {
@@ -167,7 +167,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Deposit ERC20 assets for supplying (except ETH).
 	function supply (address market, uint amount) external isNotETHAddress(market) whenNotPaused(0) {
-		bool isActive = holdefiSettings.getMarket(market);
+		bool isActive = holdefiSettings.isMarketActive(market);
 		require (isActive,'Market is not active');
 
 		transferToHoldefi(address(this), market, amount);
@@ -179,7 +179,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	function supply () payable external whenNotPaused(0) {
 		address market = ethAddress;
 		uint amount = msg.value;
-		bool isActive = holdefiSettings.getMarket(market);
+		bool isActive = holdefiSettings.isMarketActive(market);
 		require (isActive, 'Market is not active');
 		
 		supplyInternal(market, amount);
@@ -190,14 +190,14 @@ contract Holdefi is HoldefiPausableOwnable {
 		(uint balance,uint interest,uint currentSupplyIndex) = getAccountSupply(msg.sender, market);
 		
 		uint transferAmount;
-		uint totalBalance = balance.add(interest);
+		uint totalSuppliedBalance = balance.add(interest);
 
-		require (totalBalance != 0, 'Total balance should not be zero');
-		if (amount <= totalBalance){
+		require (totalSuppliedBalance != 0, 'Total balance should not be zero');
+		if (amount <= totalSuppliedBalance){
 			transferAmount = amount;
 		}
 		else {
-			transferAmount = totalBalance;
+			transferAmount = totalSuppliedBalance;
 		}
 
 		uint remaining;
@@ -253,19 +253,18 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Withdraw collateral assets
 	function withdrawCollateral (address collateral, uint amount) external whenNotPaused(3) {
-		(uint balance, ,uint borrowPowerScaled,uint totalBorrowValueScaled,) = getAccountCollateral(msg.sender, collateral);	
-		require (borrowPowerScaled != 0, 'Borrow power should not be zero');
+		(uint balance, ,uint borrowPowerValue,uint totalBorrowValue,) = getAccountCollateral(msg.sender, collateral);	
+		require (borrowPowerValue != 0, 'Borrow power should not be zero');
 
 		uint maxWithdraw;
-		if (totalBorrowValueScaled == 0) {
+		if (totalBorrowValue == 0) {
 			maxWithdraw = balance;
 		}
 		else {
-			uint collateralPriceScaled = holdefiPrices.getPrice(collateral);
+			uint collateralPrice = holdefiPrices.getPrice(collateral);
 			(,uint valueToLoanRate,,) = holdefiSettings.getCollateral(collateral);
-			uint totalCollateralValueScaled = totalBorrowValueScaled.mul(valueToLoanRate);	
-			uint collateralNedeed = totalCollateralValueScaled.div(collateralPriceScaled);
-			collateralNedeed = collateralNedeed.div(ratesDecimal);
+			uint totalCollateralValue = totalBorrowValue.mul(valueToLoanRate).div(rateDecimals);	
+			uint collateralNedeed = totalCollateralValue.div(collateralPrice);
 
 			maxWithdraw = balance.sub(collateralNedeed);
 		}
@@ -290,7 +289,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Borrow a `market` asset based on a `collateral` power 
 	function borrow (address market, address collateral, uint amount) external whenNotPaused(4) {
-		bool isActiveMarket = holdefiSettings.getMarket(market);
+		bool isActiveMarket = holdefiSettings.isMarketActive(market);
 		(bool isActiveCollateral,,,) = holdefiSettings.getCollateral(collateral);
 		require (isActiveMarket && isActiveCollateral
 				,'Market or Collateral asset is not active');
@@ -298,10 +297,10 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint maxAmount = marketAssets[market].totalSupply.sub(marketAssets[market].totalBorrow);
 		require (amount <= maxAmount, 'Amount should be less than cash');
 
-		(,,uint borrowPowerScaled,,) = getAccountCollateral(msg.sender, collateral);	
+		(,,uint borrowPowerValue,,) = getAccountCollateral(msg.sender, collateral);	
 		uint assetToBorrowPrice = holdefiPrices.getPrice(market);
-		uint assetToBorrowValueScaled = amount.mul(assetToBorrowPrice);
-		require (borrowPowerScaled > assetToBorrowValueScaled, 'Borrow power should be more than new borrow value');
+		uint assetToBorrowValue = amount.mul(assetToBorrowPrice);
+		require (borrowPowerValue > assetToBorrowValue, 'Borrow power should be more than new borrow value');
 
 		(,uint interest,uint currentBorrowIndex) = getAccountBorrow(msg.sender, market, collateral);
 		
@@ -348,13 +347,13 @@ contract Holdefi is HoldefiPausableOwnable {
 		(uint balance, uint interest,) = getAccountBorrow(msg.sender, market, collateral);
 		
 		uint transferAmount;
-		uint totalBalance = balance.add(interest);
-		require (totalBalance != 0, 'Total balance should not be zero');
-		if (amount <= totalBalance){
+		uint totalBorrowedBalance = balance.add(interest);
+		require (totalBorrowedBalance != 0, 'Total balance should not be zero');
+		if (amount <= totalBorrowedBalance){
 			transferAmount = amount;
 		}
 		else {
-			transferAmount = totalBalance;
+			transferAmount = totalBorrowedBalance;
 		}
 
 		transferToHoldefi(address(this), market, transferAmount);
@@ -370,14 +369,14 @@ contract Holdefi is HoldefiPausableOwnable {
 		(uint balance,uint interest,) = getAccountBorrow(msg.sender, market, collateral);
 		
 		uint transferAmount;
-		uint totalBalance = balance.add(interest);
-		require (totalBalance != 0, 'Total balance should not be zero');
-		if (amount <= totalBalance) {
+		uint totalBorrowedBalance = balance.add(interest);
+		require (totalBorrowedBalance != 0, 'Total balance should not be zero');
+		if (amount <= totalBorrowedBalance) {
 			transferAmount = amount;
 		}
 		else {
-			transferAmount = totalBalance;
-			uint extra = amount.sub(totalBalance);
+			transferAmount = totalBorrowedBalance;
+			uint extra = amount.sub(totalBorrowedBalance);
 			transferFromHoldefi(msg.sender, ethAddress, extra);
 		}
 
@@ -389,37 +388,36 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint borrowBalance;
 		uint borrowInterest;
 		uint borrowInterestIndex;
-		uint totalBalance;
+		uint totalBorrowedBalance;
 		address[] memory marketsList = holdefiSettings.getMarketsList();
 		for (uint i=0; i<marketsList.length; i++) {
 			market = marketsList[i];
 			
 			(borrowBalance,borrowInterest,borrowInterestIndex) = getAccountBorrow(borrower, market, collateral);
-			totalBalance = borrowBalance.add(borrowInterest);
-			if (totalBalance > 0) {
+			totalBorrowedBalance = borrowBalance.add(borrowInterest);
+			if (totalBorrowedBalance > 0) {
 				borrows[borrower][collateral][market].balance = 0;
 				borrows[borrower][collateral][market].accumulatedInterest = 0;
 				borrows[borrower][collateral][market].lastInterestIndex = borrowInterestIndex;
 				updateSupplyIndex(market);
 				updatePromotionReserve(market);		
 				marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(borrowBalance);
-				marketDebt[collateral][market] = marketDebt[collateral][market].add(totalBalance);
-				emit NewMarketDebt(borrower, market, collateral, totalBalance);
+				marketDebt[collateral][market] = marketDebt[collateral][market].add(totalBorrowedBalance);
+				emit NewMarketDebt(borrower, market, collateral, totalBorrowedBalance);
 			}
 		}
 	}
 	
 	// Liquidate borrower's collateral
 	function liquidateBorrowerCollateral (address borrower, address collateral) external whenNotPaused(6) {
-		(,uint timeSinceLastActivity,,uint totalBorrowValueScaled,bool underCollateral) = getAccountCollateral(borrower, collateral);
+		(,uint timeSinceLastActivity,,uint totalBorrowValue, bool underCollateral) = getAccountCollateral(borrower, collateral);
 		
 		require (underCollateral || (timeSinceLastActivity > secondsPerYear), 'User should be under collateral or time is over');
 
 		uint collateralPrice = holdefiPrices.getPrice(collateral);
 		(,,uint penaltyRate,) = holdefiSettings.getCollateral(collateral);
-		uint liquidatedCollateralValue = totalBorrowValueScaled.mul(penaltyRate);
+		uint liquidatedCollateralValue = totalBorrowValue.mul(penaltyRate).div(rateDecimals);
 		uint liquidatedCollateral = liquidatedCollateralValue.div(collateralPrice);
-		liquidatedCollateral = liquidatedCollateral.div(ratesDecimal);
 
 		if (liquidatedCollateral > collaterals[borrower][collateral].balance) {
 			liquidatedCollateral = collaterals[borrower][collateral].balance;
@@ -478,9 +476,8 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		uint collateralPrice = holdefiPrices.getPrice(collateral);
 		(,,,uint bonusRate) = holdefiSettings.getCollateral(collateral);
-		uint collateralAmountWithDiscountScaled = marketValue.mul(bonusRate);
-		collateralAmountWithDiscount = collateralAmountWithDiscountScaled.div(collateralPrice);
-		collateralAmountWithDiscount = collateralAmountWithDiscount.div(ratesDecimal);
+		uint collateralValue = marketValue.mul(bonusRate).div(rateDecimals);
+		collateralAmountWithDiscount = collateralValue.div(collateralPrice);
 	}
 	
 	// Returns supply and borrow index for a given `market` at current time 
@@ -578,7 +575,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint deltaInterestIndex = currentSupplyIndex.sub(supplies[account][market].lastInterestIndex);
 		uint deltaInterestScaled = deltaInterestIndex.mul(balance);
 		uint deltaInterest = deltaInterestScaled.div(secondsPerYear);
-		deltaInterest = deltaInterest.div(ratesDecimal);
+		deltaInterest = deltaInterest.div(rateDecimals);
 		
 		interest = supplies[account][market].accumulatedInterest.add(deltaInterest);
 	}
@@ -592,7 +589,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint deltaInterestIndex = currentBorrowIndex.sub(borrows[account][collateral][market].lastInterestIndex);
 		uint deltaInterestScaled = deltaInterestIndex.mul(balance);
 		uint deltaInterest = deltaInterestScaled.div(secondsPerYear);
-		deltaInterest = deltaInterest.div(ratesDecimal);
+		deltaInterest = deltaInterest.div(rateDecimals);
 		if (balance > 0) {
 			deltaInterest = deltaInterest.add(1);
 		}
@@ -601,13 +598,13 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Returns total borrow value of an `account` based on a `collateral` power
-	function getAccountTotalBorrowValue (address account, address collateral) public view returns(uint totalBorrowValueScaled) {
+	function getAccountTotalBorrowValue (address account, address collateral) public view returns(uint totalBorrowValue) {
 		address market;
 		uint balance;
 		uint interest;
 		uint totalDebt;
 		uint assetPrice;
-		uint assetValueScaled;
+		uint assetValue;
 		
 		address[] memory marketsList = holdefiSettings.getMarketsList();
 		for (uint i=0; i<marketsList.length; i++) {
@@ -617,33 +614,31 @@ contract Holdefi is HoldefiPausableOwnable {
 			totalDebt = balance.add(interest);
 
 			assetPrice = holdefiPrices.getPrice(market);
-			assetValueScaled = totalDebt.mul(assetPrice);
+			assetValue = totalDebt.mul(assetPrice);
 
-			totalBorrowValueScaled = totalBorrowValueScaled.add(assetValueScaled); //scaled by: 18 (priceDecimal)
+			totalBorrowValue = totalBorrowValue.add(assetValue); //scaled by: 18 (priceDecimal)
 		}
 	}
 
 	// Returns collateral balance, time since last activity, borrow power and total borrow value of an `account` for a given `collateral` 
-	function getAccountCollateral(address account, address collateral) public view returns(uint balance, uint timeSinceLastActivity, uint borrowPowerScaled, uint totalBorrowValueScaled, bool underCollateral) {
+	function getAccountCollateral(address account, address collateral) public view returns(uint balance, uint timeSinceLastActivity, uint borrowPowerValue, uint totalBorrowValue, bool underCollateral) {
 		balance = collaterals[account][collateral].balance;
 
-		uint collateralPriceScaled = holdefiPrices.getPrice(collateral);
-		uint collateralValueScaled = balance.mul(collateralPriceScaled);
-		collateralValueScaled = collateralValueScaled.mul(ratesDecimal);
+		uint collateralPrice = holdefiPrices.getPrice(collateral);
+		uint collateralValue = balance.mul(collateralPrice);
 		(,uint valueToLoanRate,,) = holdefiSettings.getCollateral(collateral);
-		uint totalBorrowPowerScaled = collateralValueScaled.div(valueToLoanRate);
+		uint totalBorrowPowerValue = collateralValue.mul(rateDecimals).div(valueToLoanRate);
 		uint liquidationThresholdRate = valueToLoanRate.sub(500);
-		uint totalBorrowPowerScaledL = collateralValueScaled.div(liquidationThresholdRate);
+		uint liquidationThresholdValue = collateralValue.mul(rateDecimals).div(liquidationThresholdRate);
 
-		totalBorrowValueScaled = getAccountTotalBorrowValue(account, collateral);
-
-		if (totalBorrowValueScaled > 0) {
+		totalBorrowValue = getAccountTotalBorrowValue(account, collateral);
+		if (totalBorrowValue > 0) {
 			timeSinceLastActivity = block.timestamp.sub(collaterals[account][collateral].lastUpdateTime);
 		}	
-		if (totalBorrowPowerScaled >= totalBorrowValueScaled) {
-			borrowPowerScaled = totalBorrowPowerScaled.sub(totalBorrowValueScaled);
+		if (totalBorrowValue < totalBorrowPowerValue) {
+			borrowPowerValue = totalBorrowPowerValue.sub(totalBorrowValue);
 		}	
-		if (totalBorrowPowerScaledL <= totalBorrowValueScaled) {
+		if (totalBorrowValue > liquidationThresholdValue) {
 			underCollateral = true;
 		}
 	}
@@ -652,24 +647,23 @@ contract Holdefi is HoldefiPausableOwnable {
 	function getLiquidationReserve (address collateral) public view returns(uint reserve) {
 		address market;
 		uint assetPrice;
-		uint assetValueScaled;
-		uint totalDebtValueScaled = 0;
+		uint assetValue;
+		uint totalDebtValue = 0;
 
 		address[] memory marketsList = holdefiSettings.getMarketsList();
 		for (uint i=0; i<marketsList.length; i++) {
 			market = marketsList[i];
 
 			assetPrice = holdefiPrices.getPrice(market);
-			assetValueScaled = marketDebt[collateral][market].mul(assetPrice);
+			assetValue = marketDebt[collateral][market].mul(assetPrice);
 
-			totalDebtValueScaled = totalDebtValueScaled.add(assetValueScaled); 
+			totalDebtValue = totalDebtValue.add(assetValue); 
 		}
 
-		uint collateralPriceScaled = holdefiPrices.getPrice(collateral);
+		uint collateralPrice = holdefiPrices.getPrice(collateral);
 		(,,,uint bonusRate) = holdefiSettings.getCollateral(collateral);
-		uint totalDebtCollateralValueScaled = totalDebtValueScaled.mul(bonusRate);
-		uint liquidatedCollateralNeeded = totalDebtCollateralValueScaled.div(collateralPriceScaled);
-		liquidatedCollateralNeeded = liquidatedCollateralNeeded.div(ratesDecimal);
+		uint totalDebtCollateralValue = totalDebtValue.mul(bonusRate).div(rateDecimals);
+		uint liquidatedCollateralNeeded = totalDebtCollateralValue.div(collateralPrice);
 		
 		if (collateralAssets[collateral].totalLiquidatedCollateral > liquidatedCollateralNeeded) {
 			reserve = collateralAssets[collateral].totalLiquidatedCollateral.sub(liquidatedCollateralNeeded);
@@ -695,8 +689,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	function depositPromotionReserveInternal (address market, uint amount) internal {
 		(uint reserveScaled,uint debtScaled,uint currentTime) = getCurrentPromotion(market);
 
-		uint amountScaled = amount.mul(secondsPerYear);
-		amountScaled = amountScaled.mul(ratesDecimal);
+		uint amountScaled = amount.mul(secondsPerYear).mul(rateDecimals);
 
 		uint totalReserve = reserveScaled.add(amountScaled);
 
@@ -740,8 +733,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		
 		uint maxWithdrawScaled = reserveScaled.sub(debtScaled);
 
-		uint amountScaled = amount.mul(secondsPerYear);
-	    amountScaled = amountScaled.mul(ratesDecimal);
+		uint amountScaled = amount.mul(secondsPerYear).mul(rateDecimals);
 
 	    require (amountScaled < maxWithdrawScaled, 'Amount should be less than max');
 
