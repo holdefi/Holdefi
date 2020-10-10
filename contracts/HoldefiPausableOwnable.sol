@@ -4,7 +4,10 @@ pragma solidity 0.6.12;
 import "./HoldefiOwnable.sol";
 
 // Taking ideas from Open Zeppelin's Pausable contract
-contract HoldefiPausableOwnable is HoldefiOwnable {    
+contract HoldefiPausableOwnable is HoldefiOwnable {
+
+    uint256 constant public maxPauseDuration = 2592000;     //seconds per month
+
     address public pauser;
 
      // '0' -> supply
@@ -19,9 +22,6 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     uint256 constant pauseOperationsLength = 8;
     uint256[8] public paused;
 
-    uint256 public pauseDuration = 2592000;
-
-     
     constructor (address ownerChanger) HoldefiOwnable(ownerChanger) public {
     }
 
@@ -44,7 +44,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     }
 
     function isPaused(uint256 index) public view returns(bool res) {
-        if (block.timestamp - paused[index] >= pauseDuration) {
+        if (block.timestamp > paused[index]) {
             res = false;
         }
         else {
@@ -53,8 +53,9 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     }
     
     // Called by pausers to pause, triggers stopped state.
-    function pause(uint256 index) public onlyPausers {
-        paused[index] = block.timestamp;
+    function pause(uint256 index, uint256 pauseDuration) public onlyPausers {
+        require (pauseDuration <= maxPauseDuration, "Duration not in range");
+        paused[index] = block.timestamp + pauseDuration;
     }
 
     // Called by owner to unpause, returns to normal state.
@@ -63,28 +64,25 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     }
 
     // Called by pausers to pause, triggers stopped state for selected functions
-    function batchPause(bool[8] memory functionsToPause) external onlyPausers {
-        for (uint256 i=0; i<pauseOperationsLength; i++) {
-            if (functionsToPause[i] == true){
-                pause(i);
+    function batchPause(uint256[] memory functionsToPause, uint256[] memory pauseDurations) external onlyPausers {
+        require (functionsToPause.length == pauseDurations.length, "Lists are not equal in length");
+        for (uint8 i = 0 ; i < functionsToPause.length ; i++) {
+            if (functionsToPause[i] < pauseOperationsLength) {
+                pause(functionsToPause[i], pauseDurations[i]);
             }
         }
     }
 
     // Called by pausers to pause, returns to normal state for selected functions
-    function batchUnpause(bool[8] memory functionsToUnpause) external onlyOwner {
-        for (uint256 i=0; i<pauseOperationsLength; i++) {
-            if (functionsToUnpause[i] == true){
-                unpause(i);
+    function batchUnpause(uint256[] memory functionsToUnpause) external onlyOwner {
+        for (uint8 i = 0 ; i < functionsToUnpause.length ; i++) {
+            if (functionsToUnpause[i] < pauseOperationsLength) {
+                unpause(functionsToUnpause[i]);
             }
         }
     }
     // Called by owner to set a new pauser
     function setPauser(address newPauser) external onlyOwner {
         pauser = newPauser;
-    }
-
-    function setPauseDuration(uint256 functionsToPauseuration) external onlyOwner {
-        pauseDuration = functionsToPauseuration;
     }
 }
