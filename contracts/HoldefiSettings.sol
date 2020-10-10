@@ -2,7 +2,7 @@
 pragma solidity 0.6.12;
 
 import "./SafeMath.sol";
-import "./Ownable.sol";
+import "./HoldefiOwnable.sol";
 
 
 interface HoldefiInterface {
@@ -15,7 +15,7 @@ interface HoldefiInterface {
 }
 
 // All these settings is callable by only owner
-contract HoldefiSettings is Ownable {
+contract HoldefiSettings is HoldefiOwnable {
 
 	using SafeMath for uint256;
 
@@ -87,7 +87,7 @@ contract HoldefiSettings is Ownable {
 
 	event BonusRateChanged(address collateral, uint newRate);
 	
-	constructor (address newOwnerChanger) Ownable(newOwnerChanger) public {
+	constructor (address newOwnerChanger) HoldefiOwnable(newOwnerChanger) public {
 	}
 
 	// Disposable function to Get in touch with Holdefi contract

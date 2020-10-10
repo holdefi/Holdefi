@@ -2,8 +2,8 @@
 pragma solidity 0.6.12;
 
 import "./SafeMath.sol";
-import "./Ownable.sol";
-import "./HoldefiPauser.sol";
+import "./HoldefiOwnable.sol";
+import "./HoldefiPausableOwnable.sol";
 
 // File: contracts/HoldefiPrices.sol
 interface HoldefiPricesInterface {
@@ -18,8 +18,8 @@ interface HoldefiSettingsInterface {
 	function getMarketsList() external view returns(address[] memory marketsList);
 }
 
-// File: contracts/CollateralsWallet.sol
-interface CollateralsWalletInterface {
+// File: contracts/HoldefiCollaterals.sol
+interface HoldefiCollateralsInterface {
 	function withdraw(address collateral, address payable recipient, uint amount) external;
 }
 
@@ -32,7 +32,7 @@ interface ERC20 {
 
  // Main Holdefi contract.
  // The address of ETH asset considered as 0x00 in this contract.
-contract Holdefi is HoldefiPauser {
+contract Holdefi is HoldefiPausableOwnable {
 
 	using SafeMath for uint256;
 
@@ -105,7 +105,7 @@ contract Holdefi is HoldefiPauser {
 	HoldefiPricesInterface public holdefiPrices;
 
 	// Wallet Contract for Collaterals 
-	CollateralsWalletInterface public holdefiCollaterals;
+	HoldefiCollateralsInterface public holdefiCollaterals;
 
 	// Price contract can be unchangeable
 	bool public fixPrices = false;
@@ -138,7 +138,7 @@ contract Holdefi is HoldefiPauser {
 
 	event HoldefiPricesContractChanged(HoldefiPricesInterface newAddress, HoldefiPricesInterface oldAddress);
 	
-	constructor (address newOwnerChanger, CollateralsWalletInterface holdefiCollateralsAddress, HoldefiSettingsInterface holdefiSettingsAddress, HoldefiPricesInterface holdefiPricesAddress) HoldefiPauser(newOwnerChanger) public {
+	constructor (address newOwnerChanger, HoldefiCollateralsInterface holdefiCollateralsAddress, HoldefiSettingsInterface holdefiSettingsAddress, HoldefiPricesInterface holdefiPricesAddress) HoldefiPausableOwnable(newOwnerChanger) public {
 		holdefiCollaterals = holdefiCollateralsAddress;
 		holdefiSettings = holdefiSettingsAddress;
 		holdefiPrices = holdefiPricesAddress;

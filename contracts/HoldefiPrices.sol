@@ -2,7 +2,7 @@
 pragma solidity 0.6.12;
 
 import "./SafeMath.sol";
-import "./Ownable.sol";
+import "./HoldefiOwnable.sol";
 
 interface ETHMedianizerInterface {
 
@@ -10,7 +10,7 @@ interface ETHMedianizerInterface {
 }
 
  //This contract will be changed before adding ERC20 tokens that are not stable coin
-contract HoldefiPrices is Ownable {
+contract HoldefiPrices is HoldefiOwnable {
 
     using SafeMath for uint256;
 
@@ -22,7 +22,7 @@ contract HoldefiPrices is Ownable {
 
     event PriceChanged(address asset, uint newPrice);
 
-    constructor(address newOwnerChanger, ETHMedianizerInterface ethMedianizerContract) public Ownable(newOwnerChanger) {
+    constructor(address newOwnerChanger, ETHMedianizerInterface ethMedianizerContract) public HoldefiOwnable(newOwnerChanger) {
         ethMedianizer = ethMedianizerContract;
     }
 
