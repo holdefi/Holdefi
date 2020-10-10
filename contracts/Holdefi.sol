@@ -150,6 +150,17 @@ contract Holdefi is HoldefiPausableOwnable {
         require (asset != ethAddress, "Asset should not be ETH address");
         _;
     }
+
+    modifier marketIsActive(address market) {
+		require (holdefiSettings.isMarketActive(market), "Market is not active");
+        _;
+    }
+
+    modifier collateralIsActive(address collateral) {
+		(bool isActiveCollateral,,,) = holdefiSettings.getCollateral(collateral);
+		require (isActiveCollateral, "Collateral is not active");
+		_;
+    }
 	
 	function supplyInternal (address market, uint256 amount) internal {
 		(uint256 balance,uint256 interest,uint256 currentSupplyIndex) = getAccountSupply(msg.sender, market);
@@ -166,23 +177,14 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Deposit ERC20 assets for supplying (except ETH).
-	function supply (address market, uint256 amount) external isNotETHAddress(market) whenNotPaused(0) {
-		bool isActive = holdefiSettings.isMarketActive(market);
-		require (isActive,'Market is not active');
-
+	function supply (address market, uint256 amount) external isNotETHAddress(market) whenNotPaused(0) marketIsActive(market) {
 		transferToHoldefi(address(this), market, amount);
-
 		supplyInternal(market, amount);
 	}
 
 	// Deposit ETH for supplying
-	function supply () payable external whenNotPaused(0) {
-		address market = ethAddress;
-		uint256 amount = msg.value;
-		bool isActive = holdefiSettings.isMarketActive(market);
-		require (isActive, 'Market is not active');
-		
-		supplyInternal(market, amount);
+	function supply () payable external whenNotPaused(0) marketIsActive(ethAddress) {	
+		supplyInternal(ethAddress, msg.value);
 	}
 
 	// Withdraw ERC20 assets from a market (include interests).
@@ -230,25 +232,15 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Deposit ERC20 assets as collateral(except ETH) 
-	function collateralize (address collateral, uint256 amount) external isNotETHAddress(collateral) whenNotPaused(2) {
-		(bool isActive,,,) = holdefiSettings.getCollateral(collateral);
-		require (isActive, 'Collateral asset is not active');
-
+	function collateralize (address collateral, uint256 amount) external isNotETHAddress(collateral) whenNotPaused(2) collateralIsActive(collateral) {
 		transferToHoldefi(address(holdefiCollaterals), collateral, amount);
-
 		collateralizeInternal(collateral, amount);
 	}
 
 	// Deposit ETH as collateral
-	function collateralize () payable external whenNotPaused(2) {
-		address collateral = ethAddress;
-		uint256 amount = msg.value;
-		(bool isActive,,,) = holdefiSettings.getCollateral(collateral);
-		require (isActive, 'Collateral asset is not active');
-
-		transferFromHoldefi(address(holdefiCollaterals), collateral, amount);
-
-		collateralizeInternal(collateral, amount);
+	function collateralize () payable external whenNotPaused(2) collateralIsActive(ethAddress) {
+		transferFromHoldefi(address(holdefiCollaterals), ethAddress, msg.value);
+		collateralizeInternal(ethAddress, msg.value);
 	}
 
 	// Withdraw collateral assets
@@ -288,14 +280,11 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Borrow a `market` asset based on a `collateral` power 
-	function borrow (address market, address collateral, uint256 amount) external whenNotPaused(4) {
-		bool isActiveMarket = holdefiSettings.isMarketActive(market);
-		(bool isActiveCollateral,,,) = holdefiSettings.getCollateral(collateral);
-		require (isActiveMarket && isActiveCollateral
-				,'Market or Collateral asset is not active');
-
-		uint256 maxAmount = marketAssets[market].totalSupply.sub(marketAssets[market].totalBorrow);
-		require (amount <= maxAmount, 'Amount should be less than cash');
+	function borrow (address market, address collateral, uint256 amount) external whenNotPaused(4) marketIsActive(market) collateralIsActive(collateral) {
+		require (
+			amount <= marketAssets[market].totalSupply.sub(marketAssets[market].totalBorrow),
+			'Amount should be less than cash'
+		);
 
 		(,,uint256 borrowPowerValue,,) = getAccountCollateral(msg.sender, collateral);	
 		uint256 assetToBorrowPrice = holdefiPrices.getPrice(market);
@@ -711,18 +700,14 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Deposit ERC20 asset as promotion reserve 
-	function depositPromotionReserve (address market, uint256 amount) external isNotETHAddress(market) {
+	function depositPromotionReserve (address market, uint256 amount) external isNotETHAddress(market) marketIsActive(market) {
 		transferToHoldefi(address(this), market, amount);
-
 		depositPromotionReserveInternal(market, amount);
 	}
 
 	// Deposit ETH as promotion reserve
-	function depositPromotionReserve () payable external {
-		address market = ethAddress;
-		uint256 amount = msg.value;
-
-		depositPromotionReserveInternal(market, amount);
+	function depositPromotionReserve () payable external marketIsActive(ethAddress) {
+		depositPromotionReserveInternal(ethAddress, msg.value);
 	}
 
 	// Withdraw promotion reserve by owner
