@@ -170,9 +170,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		bool isActive = holdefiSettings.getMarket(market);
 		require (isActive,'Market is not active');
 
-		ERC20 token = ERC20(market);
-		bool success = token.transferFrom(msg.sender, address(this), amount);
-		require (success, 'Cannot transfer token');
+		transferToHoldefi(address(this), market, amount);
 
 		supplyInternal(market, amount);
 	}
@@ -216,15 +214,8 @@ contract Holdefi is HoldefiPausableOwnable {
 		updatePromotion(market);
 		
 		marketAssets[market].totalSupply = marketAssets[market].totalSupply.sub(remaining);	
-				
-		if (market == ethAddress){
-			msg.sender.transfer(transferAmount);
-		}
-		else {
-			ERC20 token = ERC20(market);
-			bool success = token.transfer(msg.sender, transferAmount);
-			require (success, 'Cannot transfer token');
-		}
+
+		transferFromHoldefi(msg.sender, market, transferAmount);
 	
 		emit WithdrawSupply(msg.sender, market, transferAmount);
 	}
@@ -243,9 +234,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		(bool isActive,,,) = holdefiSettings.getCollateral(collateral);
 		require (isActive, 'Collateral asset is not active');
 
-		ERC20 token = ERC20(collateral);
-		bool success = token.transferFrom(msg.sender, address(holdefiCollaterals), amount);
-		require (success, 'Cannot Transfer Token');
+		transferToHoldefi(address(holdefiCollaterals), collateral, amount);
 
 		collateralizeInternal(collateral, amount);
 	}
@@ -257,8 +246,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		(bool isActive,,,) = holdefiSettings.getCollateral(collateral);
 		require (isActive, 'Collateral asset is not active');
 
-		(bool success, ) = address(holdefiCollaterals).call{value:amount}("");
-		require (success, 'Cannot Transfer ETH');
+		transferFromHoldefi(address(holdefiCollaterals), collateral, amount);
 
 		collateralizeInternal(collateral, amount);
 	}
@@ -327,14 +315,8 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.add(amount);
 
-		if (market == ethAddress){
-			msg.sender.transfer(amount);
-		}
-		else {
-			ERC20 token = ERC20(market);
-			bool success = token.transfer(msg.sender, amount);
-			require (success, 'Cannot transfer token');
-		}
+		transferFromHoldefi(msg.sender, market, amount);
+
 		emit Borrow(msg.sender, market, collateral, amount);
 	}
 
@@ -375,9 +357,7 @@ contract Holdefi is HoldefiPausableOwnable {
 			transferAmount = totalBalance;
 		}
 
-		ERC20 token = ERC20(market);
-		bool success = token.transferFrom(msg.sender, address(this), transferAmount);
-		require (success, 'Cannot transfer token');
+		transferToHoldefi(address(this), market, transferAmount);
 
 		repayBorrowInternal(market, collateral, transferAmount);
 	}
@@ -398,7 +378,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		else {
 			transferAmount = totalBalance;
 			uint extra = amount.sub(totalBalance);
-			msg.sender.transfer(extra);
+			transferFromHoldefi(msg.sender, ethAddress, extra);
 		}
 
 		repayBorrowInternal(market, collateral, transferAmount);
@@ -472,9 +452,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		require (collateralAmountWithDiscount <= collateralAssets[collateral].totalLiquidatedCollateral, 'Collateral amount with discount should be less than total liquidated assets');
 
-		ERC20 token = ERC20(market);
-		bool success = token.transferFrom(msg.sender, address(this), marketAmount);
-		require (success, 'Cannot transfer token');
+		transferToHoldefi(address(this), market, marketAmount);
 
 		buyLiquidatedCollateralInternal(market, collateral, marketAmount, collateralAmountWithDiscount);
 	}
@@ -741,9 +719,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Deposit ERC20 asset as promotion reserve 
 	function depositPromotionReserve (address market, uint amount) external isNotETHAddress(market) {
-		ERC20 token = ERC20(market);
-		bool success = token.transferFrom(msg.sender, address(this), amount);
-		require (success, 'Cannot transfer token');
+		transferToHoldefi(address(this), market, amount);
 
 		depositPromotionReserveInternal(market, amount);
 	}
@@ -774,14 +750,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		marketAssets[market].promotionDebtScaled = 0;
 		marketAssets[market].promotionDebtLastUpdateTime = currentTime;	
 
-	    if (market == ethAddress){
-			msg.sender.transfer(amount);
-	    }
-	    else {
-			ERC20 token = ERC20(market);
-			bool success = token.transfer(msg.sender, amount);
-			require (success, 'Cannot transfer token');
-	    }
+	    transferFromHoldefi(msg.sender, market, amount);
 	}
 
 	// Set promotion rate by owner
@@ -815,6 +784,25 @@ contract Holdefi is HoldefiPausableOwnable {
 	// Fix HoldefiPrice contract 
 	function fixHoldefiPricesContract () external onlyOwner {
 		fixPrices = true;
+	}
+
+
+	function transferFromHoldefi(address receiver, address asset, uint256 amount) internal {
+		bool success = false;
+		if (asset == ethAddress){
+			(success, ) = receiver.call{value:amount}("");
+		}
+		else {
+			ERC20 token = ERC20(asset);
+			success = token.transfer(receiver, amount);
+		}
+		require (success, "Cannot Transfer");
+	}
+
+	function transferToHoldefi(address receiver, address asset, uint256 amount) internal {
+		ERC20 token = ERC20(asset);
+		bool success = token.transferFrom(msg.sender, receiver, amount);
+		require (success, "Cannot Transfer");
 	}
 
     receive() external payable {

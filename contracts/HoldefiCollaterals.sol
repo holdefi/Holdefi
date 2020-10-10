@@ -20,17 +20,18 @@ contract HoldefiCollaterals {
 	}
 	
 	// Holdefi contract withdraws collateral's tokens from this contract to caller's account
-	function withdraw (address collateralAsset, address payable recipient, uint amount) external {
-		require (msg.sender == holdefiContract,'Sender should be holdefi contract');
+	function withdraw (address collateral, address recipient, uint amount) external {
+		require (msg.sender == holdefiContract, 'Sender should be holdefi contract');
 		
-		if (collateralAsset == ethAddress){
-			recipient.transfer(amount);
+		bool success = false;
+		if (collateral == ethAddress){
+			(success, ) = recipient.call{value:amount}("");
 		}
 		else {
-			ERC20 token = ERC20(collateralAsset);
-			bool success = token.transfer(recipient, amount);
-			require (success, 'Cannot Transfer Token');
+			ERC20 token = ERC20(collateral);
+			success = token.transfer(recipient, amount);
 		}
+		require (success, "Cannot Transfer");
 	}
 
 	receive() external payable {
