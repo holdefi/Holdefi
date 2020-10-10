@@ -39,6 +39,10 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	uint256 constant public penaltyRateMaxIncrease = 500; 		  //5%
 
+	// Used for calculating liquidation threshold 
+	// There is 5% gap between value to loan rate and liquidation rate
+	uint256 constant private fivePercentLiquidationGap = 500;
+
 	// Markets Features 
 	struct MarketSettings {
 		bool isActive;
@@ -224,9 +228,11 @@ contract HoldefiSettings is HoldefiOwnable {
 	
 	// Owner can set a new VTL rate (Liquidation threshold) for each collateral asset
 	function setValueToLoanRate (address collateralAsset, uint256 newValueToLoanRate) external onlyOwner {
-		require (newValueToLoanRate <= maxValueToLoanRate
-				&& collateralAssets[collateralAsset].penaltyRate <= newValueToLoanRate
-				,'Rate should be in allowed range');
+		require (
+			newValueToLoanRate <= maxValueToLoanRate &&
+			collateralAssets[collateralAsset].penaltyRate.add(fivePercentLiquidationGap) <= newValueToLoanRate
+			,'Rate should be in allowed range'
+		);
 		
 		uint256 currentTime = block.timestamp;
 		if (newValueToLoanRate > collateralAssets[collateralAsset].valueToLoanRate) {
@@ -243,10 +249,12 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	// Owner can set penalty rate for each collateral asset
 	function setPenaltyRate (address collateralAsset ,uint256 newPenaltyRate) external onlyOwner {
-		require (newPenaltyRate <= maxPenaltyRate
-				&& newPenaltyRate <= collateralAssets[collateralAsset].valueToLoanRate
-				&& collateralAssets[collateralAsset].bonusRate <= newPenaltyRate
-				,'Rate should be in allowed range');
+		require (
+			newPenaltyRate <= maxPenaltyRate && 
+			newPenaltyRate.add(fivePercentLiquidationGap) <= collateralAssets[collateralAsset].valueToLoanRate && 
+			collateralAssets[collateralAsset].bonusRate <= newPenaltyRate
+			,'Rate should be in allowed range'
+		);
 
 		uint256 currentTime = block.timestamp;
 		if (newPenaltyRate > collateralAssets[collateralAsset].penaltyRate){

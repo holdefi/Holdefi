@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
+pragma experimental ABIEncoderV2;
 
 import "./HoldefiOwnable.sol";
 
@@ -8,80 +9,88 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
 
     uint256 constant public maxPauseDuration = 2592000;     //seconds per month
 
+    struct Operation {
+        bool isValid;
+        uint256 pauseEndTime;
+    }
+
     address public pauser;
 
-     // '0' -> supply
-     // '1' -> withdrawSupply
-     // '2' -> collatralize
-     // '3' -> withdrawCollateral
-     // '4' -> borrow
-     // '5' -> repayBorrrow
-     // '6' -> liquidateBorrowerCollateral
-     // '7' -> buyLiquidatedCollateral
-    
-    uint256 constant pauseOperationsLength = 8;
-    uint256[8] public paused;
-
+    mapping(string => Operation) public paused;
+     
+    // Define valid operations that can be paused
     constructor (address ownerChanger) HoldefiOwnable(ownerChanger) public {
+        paused["supply"].isValid = true;
+        paused["withdrawSupply"].isValid = true;
+        paused["collateralize"].isValid = true;
+        paused["withdrawCollateral"].isValid = true;
+        paused["borrow"].isValid = true;
+        paused["repayBorrow"].isValid = true;
+        paused["liquidateBorrowerCollateral"].isValid = true;
+        paused["buyLiquidatedCollateral"].isValid = true;
     }
 
-    // Modifier to make a function callable only by owner or pauser   
     modifier onlyPausers() {
-        require(msg.sender == owner || msg.sender == pauser , 'Sender should be Owner or Pauser');
+        require(msg.sender == owner || msg.sender == pauser , "Sender should be owner or pauser");
         _;
     }
     
-    // Modifier to make a function callable only when a functions is not paused.
-    modifier whenNotPaused(uint256 index) {
-        require(!isPaused(index), "Pausable: paused");
+    modifier whenNotPaused(string memory operation) {
+        require(!isPaused(operation), "Operation is paused");
         _;
     }
 
-    // Modifier to make a function callable only when a functions is paused.
-    modifier whenPaused(uint256 index) {
-        require(isPaused(index), "Pausable: not paused");
+    modifier whenPaused(string memory operation) {
+        require(isPaused(operation), "Operation is unpaused");
         _;
     }
 
-    function isPaused(uint256 index) public view returns(bool res) {
-        if (block.timestamp > paused[index]) {
+    modifier operationIsValid(string memory operation) {
+        require(paused[operation].isValid ,"Operation is not valid");
+        _;
+    }
+
+    function isPaused(string memory operation) public view returns (bool res) {
+        if (block.timestamp > paused[operation].pauseEndTime) {
             res = false;
         }
         else {
             res = true;
         }
     }
-    
-    // Called by pausers to pause, triggers stopped state.
-    function pause(uint256 index, uint256 pauseDuration) public onlyPausers {
+
+    function pause(string memory operation, uint256 pauseDuration)
+        public
+        onlyPausers
+        operationIsValid(operation)
+        whenNotPaused(operation)
+    {
         require (pauseDuration <= maxPauseDuration, "Duration not in range");
-        paused[index] = block.timestamp + pauseDuration;
+        paused[operation].pauseEndTime = block.timestamp + pauseDuration;
     }
 
-    // Called by owner to unpause, returns to normal state.
-    function unpause(uint256 index) public onlyOwner {
-        paused[index] = 0;
+    function unpause(string memory operation)
+        public
+        onlyOwner
+        operationIsValid(operation)
+        whenPaused(operation)
+    {
+        paused[operation].pauseEndTime = 0;
     }
 
-    // Called by pausers to pause, triggers stopped state for selected functions
-    function batchPause(uint256[] memory functionsToPause, uint256[] memory pauseDurations) external onlyPausers {
-        require (functionsToPause.length == pauseDurations.length, "Lists are not equal in length");
-        for (uint8 i = 0 ; i < functionsToPause.length ; i++) {
-            if (functionsToPause[i] < pauseOperationsLength) {
-                pause(functionsToPause[i], pauseDurations[i]);
-            }
+    function batchPause(string[] memory operations, uint256[] memory pauseDurations) external {
+        require (operations.length == pauseDurations.length, "Lists are not equal in length");
+        for (uint256 i = 0 ; i < operations.length ; i++) {
+            pause(operations[i], pauseDurations[i]);
         }
     }
 
-    // Called by pausers to pause, returns to normal state for selected functions
-    function batchUnpause(uint256[] memory functionsToUnpause) external onlyOwner {
-        for (uint8 i = 0 ; i < functionsToUnpause.length ; i++) {
-            if (functionsToUnpause[i] < pauseOperationsLength) {
-                unpause(functionsToUnpause[i]);
-            }
+    function batchUnpause(string[] memory operations) external {
+        for (uint256 i = 0 ; i < operations.length ; i++) {
+            unpause(operations[i]);
         }
     }
-    // Called by owner to set a new pauser
+
     function setPauser(address newPauser) external onlyOwner {
         pauser = newPauser;
     }
