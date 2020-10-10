@@ -166,7 +166,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	event HoldefiPricesContractChanged(HoldefiPricesInterface newAddress, HoldefiPricesInterface oldAddress);
 	
-	constructor (address newOwnerChanger, HoldefiCollateralsInterface holdefiCollateralsAddress, HoldefiSettingsInterface holdefiSettingsAddress, HoldefiPricesInterface holdefiPricesAddress) HoldefiPausableOwnable(newOwnerChanger) public {
+	constructor (HoldefiCollateralsInterface holdefiCollateralsAddress, HoldefiSettingsInterface holdefiSettingsAddress, HoldefiPricesInterface holdefiPricesAddress) public {
 		holdefiCollaterals = holdefiCollateralsAddress;
 		holdefiSettings = holdefiSettingsAddress;
 		holdefiPrices = holdefiPricesAddress;

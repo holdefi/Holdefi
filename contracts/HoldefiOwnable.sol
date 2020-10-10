@@ -1,44 +1,38 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
 
- // Taking ideas from Open Zeppelin's Pausable contract
+
 contract HoldefiOwnable {
     address public owner;
-    address public ownerChanger;
     address public pendingOwner;
 
     event OwnershipTransferRequested(address newPendingOwner);
 
-    event OwnershipTransferred(address oldOwner, address newOwner);
+    event OwnershipTransferred(address newOwner, address oldOwner);
 
-    // The Ownable constructor sets the `ownerChanger` and the original `owner` of the contract.
-    constructor (address newOwnerChanger) public {
+    constructor () public {
         owner = msg.sender;
-        ownerChanger = newOwnerChanger;
+        emit OwnershipTransferred(owner, address(0));
     }
 
-    // Modifier to make a function callable only by owner
     modifier onlyOwner() {
-        require(msg.sender == owner, 'Sender should be Owner');
+        require(msg.sender == owner, "Sender should be owner");
         _;
     }
 
-    // Allows the current owner to transfer control of the contract to a newOwner. (It should be accepted by OwnerChanger)
     function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0),'New owner can not be zero address');
+        require(newOwner != address(0), "New owner can not be zero address");
         pendingOwner = newOwner;
 
         emit OwnershipTransferRequested(newOwner);
     }
 
-    // Owner changer can accept if owner call transferOwnership function
     function acceptTransferOwnership () external {
-        require (msg.sender == ownerChanger, 'Sender should be ownerChanger');
-        require (pendingOwner != address(0), 'Pending Owner is empty');
-        address oldOwner = owner;
+        require (pendingOwner != address(0), "Pending owner is empty");
+        require (pendingOwner == msg.sender, "Pending owner is not same as sender");
+        
+        emit OwnershipTransferred(pendingOwner, owner);
         owner = pendingOwner;
         pendingOwner = address(0);
-
-        emit OwnershipTransferred(oldOwner, pendingOwner);
     }
 }

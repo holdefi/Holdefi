@@ -93,9 +93,6 @@ contract HoldefiSettings is HoldefiOwnable {
 	event PenaltyRateChanged(address collateral, uint256 newRate);
 
 	event BonusRateChanged(address collateral, uint256 newRate);
-	
-	constructor (address ownerChanger) HoldefiOwnable(ownerChanger) public {
-	}
 
 	// Disposable function to Get in touch with Holdefi contract
 	function setHoldefiContract(HoldefiInterface holdefiContractAddress) external onlyOwner {

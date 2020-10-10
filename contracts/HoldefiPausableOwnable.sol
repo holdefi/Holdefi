@@ -19,7 +19,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     mapping(string => Operation) public paused;
      
     // Define valid operations that can be paused
-    constructor (address ownerChanger) HoldefiOwnable(ownerChanger) public {
+    constructor () public {
         paused["supply"].isValid = true;
         paused["withdrawSupply"].isValid = true;
         paused["collateralize"].isValid = true;

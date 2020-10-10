@@ -26,7 +26,7 @@ contract HoldefiPrices is HoldefiOwnable {
 
     event NewPriceAggregator(address indexed asset, uint256 decimals, address priceAggregator);
 
-    constructor(address ownerChanger) HoldefiOwnable(ownerChanger) public {
+    constructor() public {
         assets[ethAddress].decimals = 18;
     }
 
