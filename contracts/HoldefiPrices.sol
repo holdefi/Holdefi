@@ -14,6 +14,8 @@ contract HoldefiPrices is HoldefiOwnable {
 
     using SafeMath for uint256;
 
+    address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+
     uint constant public priceDecimal = 10**18;
    
     mapping(address => uint) public assetPrices;
@@ -28,7 +30,7 @@ contract HoldefiPrices is HoldefiOwnable {
 
     // Returns price of selected asset
     function getPrice(address asset) external view returns(uint price) {
-    	if (asset == address(0)){
+    	if (asset == ethAddress){
     		price = uint(ethMedianizer.read());
     	}
         else {
@@ -38,7 +40,7 @@ contract HoldefiPrices is HoldefiOwnable {
 
      // TODO: This function should be internal for the first version of priceFeed
     function setPrice(address asset, uint newPrice) public onlyOwner {
-        require (asset != address(0),'Price of ETH can not be changed');
+        require (asset != ethAddress,'Price of ETH can not be changed');
 
         assetPrices[asset] = newPrice;
         emit PriceChanged(asset, newPrice);

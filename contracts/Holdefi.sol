@@ -36,6 +36,8 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	using SafeMath for uint256;
 
+	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+
 	// All rates in this contract are scaled by ratesDecimal.
 	uint constant public ratesDecimal = 10 ** 4;
 
@@ -143,6 +145,11 @@ contract Holdefi is HoldefiPausableOwnable {
 		holdefiSettings = holdefiSettingsAddress;
 		holdefiPrices = holdefiPricesAddress;
 	}
+
+	modifier isNotETHAddress(address asset) {
+        require (asset != ethAddress, "Asset should not be ETH address");
+        _;
+    }
 	
 	function supplyInternal (address market, uint amount) internal {
 		(uint balance,uint interest,uint currentSupplyIndex) = getAccountSupply(msg.sender, market);
@@ -159,8 +166,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Deposit ERC20 assets for supplying (except ETH).
-	function supply (address market, uint amount) external whenNotPaused(0) {
-		require (market != address(0), 'Supply asset should not be zero address');
+	function supply (address market, uint amount) external isNotETHAddress(market) whenNotPaused(0) {
 		bool isActive = holdefiSettings.getMarket(market);
 		require (isActive,'Market is not active');
 
@@ -173,7 +179,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Deposit ETH for supplying
 	function supply () payable external whenNotPaused(0) {
-		address market = address(0);
+		address market = ethAddress;
 		uint amount = msg.value;
 		bool isActive = holdefiSettings.getMarket(market);
 		require (isActive, 'Market is not active');
@@ -211,7 +217,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		
 		marketAssets[market].totalSupply = marketAssets[market].totalSupply.sub(remaining);	
 				
-		if (market == address(0)){
+		if (market == ethAddress){
 			msg.sender.transfer(transferAmount);
 		}
 		else {
@@ -233,8 +239,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Deposit ERC20 assets as collateral(except ETH) 
-	function collateralize (address collateral, uint amount) external whenNotPaused(2) {
-		require (collateral != address(0), 'Collateral asset should not be zero address');
+	function collateralize (address collateral, uint amount) external isNotETHAddress(collateral) whenNotPaused(2) {
 		(bool isActive,,,) = holdefiSettings.getCollateral(collateral);
 		require (isActive, 'Collateral asset is not active');
 
@@ -247,7 +252,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Deposit ETH as collateral
 	function collateralize () payable external whenNotPaused(2) {
-		address collateral = address(0);
+		address collateral = ethAddress;
 		uint amount = msg.value;
 		(bool isActive,,,) = holdefiSettings.getCollateral(collateral);
 		require (isActive, 'Collateral asset is not active');
@@ -322,7 +327,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.add(amount);
 
-		if (market == address(0)){
+		if (market == ethAddress){
 			msg.sender.transfer(amount);
 		}
 		else {
@@ -357,9 +362,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Repay borrow a `market` token based on a `collateral` power
-	function repayBorrow (address market, address collateral, uint amount) external whenNotPaused(5) {
-		require (market != address(0), 'Borrow asset should not be zero address');
-
+	function repayBorrow (address market, address collateral, uint amount) external isNotETHAddress(market) whenNotPaused(5) {
 		(uint balance, uint interest,) = getAccountBorrow(msg.sender, market, collateral);
 		
 		uint transferAmount;
@@ -381,7 +384,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Repay borrow ETH based on a `collateral` power
 	function repayBorrow (address collateral) payable external whenNotPaused(5) {
-		address market = address(0);
+		address market = ethAddress;
 		uint amount = msg.value;		
 
 		(uint balance,uint interest,) = getAccountBorrow(msg.sender, market, collateral);
@@ -462,9 +465,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Buy `collateral` in exchange for `market` token
-	function buyLiquidatedCollateral (address market, address collateral, uint marketAmount) external whenNotPaused(7) {
-		require (market != address(0), 'Market should not be zero address');
-	
+	function buyLiquidatedCollateral (address market, address collateral, uint marketAmount) external isNotETHAddress(market) whenNotPaused(7) {
 		require (marketAmount <= marketDebt[collateral][market], 'Amount should be less than total liquidated assets');
 
 		uint collateralAmountWithDiscount = getDiscountedCollateralAmount(market, collateral, marketAmount);
@@ -480,7 +481,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Buy `collateral` in exchange for ETH 
 	function buyLiquidatedCollateral (address collateral) external payable whenNotPaused(7) {
-		address market = address(0);
+		address market = ethAddress;
 		uint marketAmount = msg.value;
 
 		require (marketAmount <= marketDebt[collateral][market], 'Amount should be less than total liquidated assets');
@@ -739,9 +740,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Deposit ERC20 asset as promotion reserve 
-	function depositPromotionReserve (address market, uint amount) external {
-		require (market != address(0), 'Market asset should not be zero address');
-
+	function depositPromotionReserve (address market, uint amount) external isNotETHAddress(market) {
 		ERC20 token = ERC20(market);
 		bool success = token.transferFrom(msg.sender, address(this), amount);
 		require (success, 'Cannot transfer token');
@@ -751,7 +750,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Deposit ETH as promotion reserve
 	function depositPromotionReserve () payable external {
-		address market = address(0);
+		address market = ethAddress;
 		uint amount = msg.value;
 
 		depositPromotionReserveInternal(market, amount);
@@ -775,7 +774,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		marketAssets[market].promotionDebtScaled = 0;
 		marketAssets[market].promotionDebtLastUpdateTime = currentTime;	
 
-	    if (market == address(0)){
+	    if (market == ethAddress){
 			msg.sender.transfer(amount);
 	    }
 	    else {

@@ -9,6 +9,8 @@ interface ERC20 {
 // This contract holds collateralls
 contract HoldefiCollaterals {
 
+	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+
 	address public holdefiContract;
 
 	// Disposable function to Get in touch with Holdefi contract
@@ -21,7 +23,7 @@ contract HoldefiCollaterals {
 	function withdraw (address collateralAsset, address payable recipient, uint amount) external {
 		require (msg.sender == holdefiContract,'Sender should be holdefi contract');
 		
-		if (collateralAsset == address(0)){
+		if (collateralAsset == ethAddress){
 			recipient.transfer(amount);
 		}
 		else {
