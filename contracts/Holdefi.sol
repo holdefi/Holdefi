@@ -2,7 +2,6 @@
 pragma solidity 0.6.12;
 
 import "./SafeMath.sol";
-import "./HoldefiOwnable.sol";
 import "./HoldefiPausableOwnable.sol";
 
 // File: contracts/HoldefiPrices.sol
