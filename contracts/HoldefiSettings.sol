@@ -53,10 +53,13 @@ contract HoldefiSettings is HoldefiOwnable {
 	// Collaterals Features
 	struct CollateralSettings {
 		bool isActive;
+
 		uint256 valueToLoanRate;   // Collateral liquidation threshold
 		uint256 VTLUpdateTime;
+
 		uint256 penaltyRate; 		// Portion of collateral being liquidated during liquidation
 		uint256 penaltyUpdateTime;
+		
 		uint256 bonusRate;		    // Bonus for buyers who buy liquidated collaterals
 	}
 
@@ -115,21 +118,6 @@ contract HoldefiSettings is HoldefiOwnable {
 	// Returns list of all markets
 	function getMarketsList() external view returns (address[] memory res){
 		res = marketsList;
-	}
-
-	// Returns true if an asset is in the market list
-	function isMarketActive(address market) external view returns (bool active){
-		active = marketAssets[market].isActive;
-	}
-
-	// Returns the features of a collateral (Is active- VTL rate- Penalty rate- Bonus rate)
-	function getCollateral(address collateral) external view returns (bool, uint, uint, uint){
-		return(
-			collateralAssets[collateral].isActive,
-			collateralAssets[collateral].valueToLoanRate,
-			collateralAssets[collateral].penaltyRate,
-			collateralAssets[collateral].bonusRate		
-			);
 	}
 	
 	// Owner can set a new borrow rate

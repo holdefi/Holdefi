@@ -63,7 +63,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     }
 
     // Called by pausers to pause, triggers stopped state for selected functions
-    function batchPause(bool[8] memory functionsToPause) public onlyPausers {
+    function batchPause(bool[8] memory functionsToPause) external onlyPausers {
         for (uint256 i=0; i<pauseOperationsLength; i++) {
             if (functionsToPause[i] == true){
                 pause(i);
@@ -72,7 +72,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     }
 
     // Called by pausers to pause, returns to normal state for selected functions
-    function batchUnpause(bool[8] memory functionsToUnpause) public onlyOwner {
+    function batchUnpause(bool[8] memory functionsToUnpause) external onlyOwner {
         for (uint256 i=0; i<pauseOperationsLength; i++) {
             if (functionsToUnpause[i] == true){
                 unpause(i);

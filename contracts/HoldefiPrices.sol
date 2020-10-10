@@ -47,7 +47,7 @@ contract HoldefiPrices is HoldefiOwnable {
     }
 
     // Called by owner to add new stable token at 1$ price
-    function addStableCoin(address asset) public onlyOwner {
+    function addStableCoin(address asset) external onlyOwner {
         setPrice(asset, priceDecimal);
     }
     

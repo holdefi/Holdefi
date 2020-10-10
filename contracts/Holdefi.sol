@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
+pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -12,10 +13,33 @@ interface HoldefiPricesInterface {
 
 // File: contracts/HoldefiSettings.sol
 interface HoldefiSettingsInterface {
+
+	struct MarketSettings {
+		bool isActive;      
+
+		uint256 borrowRate;
+		uint256 borrowRateUpdateTime;
+
+		uint256 suppliersShareRate;
+		uint256 suppliersShareRateUpdateTime;
+	}
+
+	struct CollateralSettings {
+		bool isActive;    
+
+		uint256 valueToLoanRate; 
+		uint256 VTLUpdateTime;
+
+		uint256 penaltyRate;
+		uint256 penaltyUpdateTime;
+
+		uint256 bonusRate;
+	}
+
 	function getInterests(address market, uint256 totalSupply, uint256 totalBorrow) external view returns(uint256 borrowRate, uint256 supplyRate);
-	function isMarketActive(address market) external view returns(bool isActive);
-	function getCollateral(address collateral) external view returns(bool isActive, uint256 valueToLoanRate, uint256 penaltyRate, uint256 bonusRate);
 	function getMarketsList() external view returns(address[] memory marketsList);
+	function marketAssets(address market) external view returns(MarketSettings memory);
+	function collateralAssets(address collateral) external view returns(CollateralSettings memory);
 }
 
 // File: contracts/HoldefiCollaterals.sol
@@ -145,13 +169,12 @@ contract Holdefi is HoldefiPausableOwnable {
     }
 
     modifier marketIsActive(address market) {
-		require (holdefiSettings.isMarketActive(market), "Market is not active");
+		require (holdefiSettings.marketAssets(market).isActive, "Market is not active");
         _;
     }
 
     modifier collateralIsActive(address collateral) {
-		(bool isActiveCollateral,,,) = holdefiSettings.getCollateral(collateral);
-		require (isActiveCollateral, "Collateral is not active");
+		require (holdefiSettings.collateralAssets(collateral).isActive, "Collateral is not active");
 		_;
     }
 	
@@ -247,7 +270,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		}
 		else {
 			uint256 collateralPrice = holdefiPrices.getPrice(collateral);
-			(,uint256 valueToLoanRate,,) = holdefiSettings.getCollateral(collateral);
+			uint256 valueToLoanRate = holdefiSettings.collateralAssets(collateral).valueToLoanRate;
 			uint256 totalCollateralValue = totalBorrowValue.mul(valueToLoanRate).div(rateDecimals);	
 			uint256 collateralNedeed = totalCollateralValue.div(collateralPrice);
 
@@ -397,7 +420,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		require (underCollateral || (timeSinceLastActivity > secondsPerYear), 'User should be under collateral or time is over');
 
 		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
-		(,,uint256 penaltyRate,) = holdefiSettings.getCollateral(collateral);
+		uint256 penaltyRate = holdefiSettings.collateralAssets(collateral).penaltyRate;
 		uint256 liquidatedCollateralValue = totalBorrowValue.mul(penaltyRate).div(rateDecimals);
 		uint256 liquidatedCollateral = liquidatedCollateralValue.div(collateralPrice);
 
@@ -457,7 +480,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 marketValue = marketAmount.mul(marketPrice);
 
 		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
-		(,,,uint256 bonusRate) = holdefiSettings.getCollateral(collateral);
+		uint256 bonusRate = holdefiSettings.collateralAssets(collateral).bonusRate;
 		uint256 collateralValue = marketValue.mul(bonusRate).div(rateDecimals);
 		collateralAmountWithDiscount = collateralValue.div(collateralPrice);
 	}
@@ -608,7 +631,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
 		uint256 collateralValue = balance.mul(collateralPrice);
-		(,uint256 valueToLoanRate,,) = holdefiSettings.getCollateral(collateral);
+		uint256 valueToLoanRate = holdefiSettings.collateralAssets(collateral).valueToLoanRate;
 		uint256 totalBorrowPowerValue = collateralValue.mul(rateDecimals).div(valueToLoanRate);
 		uint256 liquidationThresholdRate = valueToLoanRate.sub(500);
 		uint256 liquidationThresholdValue = collateralValue.mul(rateDecimals).div(liquidationThresholdRate);
@@ -643,7 +666,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		}
 
 		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
-		(,,,uint256 bonusRate) = holdefiSettings.getCollateral(collateral);
+		uint256 bonusRate = holdefiSettings.collateralAssets(collateral).bonusRate;
 		uint256 totalDebtCollateralValue = totalDebtValue.mul(bonusRate).div(rateDecimals);
 		uint256 liquidatedCollateralNeeded = totalDebtCollateralValue.div(collateralPrice);
 		
