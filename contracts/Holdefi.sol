@@ -327,7 +327,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(remaining);	
 
-		emit Borrow (msg.sender, market, collateral, amount);
+		emit RepayBorrow (msg.sender, market, collateral, amount);
 	}
 
 	// Repay borrow a `market` token based on a `collateral` power
