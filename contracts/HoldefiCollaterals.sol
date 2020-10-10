@@ -20,7 +20,7 @@ contract HoldefiCollaterals {
 	}
 	
 	// Holdefi contract withdraws collateral's tokens from this contract to caller's account
-	function withdraw (address collateral, address recipient, uint amount) external {
+	function withdraw (address collateral, address recipient, uint256 amount) external {
 		require (msg.sender == holdefiContract, 'Sender should be holdefi contract');
 		
 		bool success = false;

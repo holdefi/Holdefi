@@ -6,7 +6,7 @@ import "./HoldefiOwnable.sol";
 
 interface ETHMedianizerInterface {
 
-   function read() external view returns(uint price);
+   function read() external view returns(uint256 price);
 }
 
  //This contract will be changed before adding ERC20 tokens that are not stable coin
@@ -16,20 +16,20 @@ contract HoldefiPrices is HoldefiOwnable {
 
     address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    uint constant public priceDecimal = 10**18;
+    uint256 constant public priceDecimal = 10**18;
    
     mapping(address => uint) public assetPrices;
 
     ETHMedianizerInterface public ethMedianizer;
 
-    event PriceChanged(address asset, uint newPrice);
+    event PriceChanged(address asset, uint256 newPrice);
 
     constructor(address newOwnerChanger, ETHMedianizerInterface ethMedianizerContract) public HoldefiOwnable(newOwnerChanger) {
         ethMedianizer = ethMedianizerContract;
     }
 
     // Returns price of selected asset
-    function getPrice(address asset) external view returns(uint price) {
+    function getPrice(address asset) external view returns(uint256 price) {
     	if (asset == ethAddress){
     		price = uint(ethMedianizer.read());
     	}
@@ -39,7 +39,7 @@ contract HoldefiPrices is HoldefiOwnable {
     }
 
      // TODO: This function should be internal for the first version of priceFeed
-    function setPrice(address asset, uint newPrice) public onlyOwner {
+    function setPrice(address asset, uint256 newPrice) public onlyOwner {
         require (asset != ethAddress,'Price of ETH can not be changed');
 
         assetPrices[asset] = newPrice;
