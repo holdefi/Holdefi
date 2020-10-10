@@ -3,25 +3,25 @@ pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-// This contract holds collateralls
+
 contract HoldefiCollaterals {
 
 	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
 	address public holdefiContract;
 
-	modifier onlyHoldefiContract() {
+	constructor() public {
+		holdefiContract = msg.sender;
+	}
+
+    modifier onlyHoldefiContract() {
         require (msg.sender == holdefiContract, "Sender should be holdefi contract");
         _;
     }
 
-	// Disposable function to Get in touch with Holdefi contract
-	function setHoldefiContract(address holdefiContractAddress) external {
-		require (holdefiContract == address(0),'Should be set once');
-		holdefiContract = holdefiContractAddress;
+    receive() external payable onlyHoldefiContract {
 	}
-	
-	// Holdefi contract withdraws collateral's tokens from this contract to caller's account
+
 	function withdraw (address collateral, address recipient, uint256 amount)
 		external
 		onlyHoldefiContract
@@ -35,8 +35,5 @@ contract HoldefiCollaterals {
 			success = token.transfer(recipient, amount);
 		}
 		require (success, "Cannot Transfer");
-	}
-
-	receive() external payable onlyHoldefiContract {
 	}
 }

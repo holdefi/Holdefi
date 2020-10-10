@@ -6,9 +6,7 @@ const Wallet = artifacts.require("CollateralsWallet");
 module.exports = function(deployer) {
 	deployer.deploy(HoldefiPrices).then(function(){
 		return deployer.deploy(HoldefiSettings).then(function(){
-    		return deployer.deploy(Wallet).then(function(){
-    			return deployer.deploy(Holdefi, Wallet.address, HoldefiSettings.address, HoldefiPrices.address);
-    		})
+    		return deployer.deploy(Holdefi, HoldefiSettings.address, HoldefiPrices.address);
     	})
 	})
 }

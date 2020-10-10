@@ -3,8 +3,8 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./HoldefiPausableOwnable.sol";
+import "./HoldefiCollaterals.sol";
 
 /// @notice File: contracts/HoldefiPrices.sol
 interface HoldefiPricesInterface {
@@ -42,11 +42,6 @@ interface HoldefiSettingsInterface {
 	function getMarketsList() external view returns(address[] memory marketsList);
 	function marketAssets(address market) external view returns(MarketSettings memory);
 	function collateralAssets(address collateral) external view returns(CollateralSettings memory);
-}
-
-// File: contracts/HoldefiCollaterals.sol
-interface HoldefiCollateralsInterface {
-	function withdraw(address collateral, address payable recipient, uint256 amount) external;
 }
 
  // Main Holdefi contract.
@@ -133,7 +128,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	HoldefiPricesInterface public holdefiPrices;
 
 	// Wallet Contract for Collaterals 
-	HoldefiCollateralsInterface public holdefiCollaterals;
+	HoldefiCollaterals public holdefiCollaterals;
 
 	// Price contract can be unchangeable
 	bool public fixPrices = false;
@@ -166,10 +161,15 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	event HoldefiPricesContractChanged(HoldefiPricesInterface newAddress, HoldefiPricesInterface oldAddress);
 	
-	constructor (HoldefiCollateralsInterface holdefiCollateralsAddress, HoldefiSettingsInterface holdefiSettingsAddress, HoldefiPricesInterface holdefiPricesAddress) public {
-		holdefiCollaterals = holdefiCollateralsAddress;
+	constructor(
+		HoldefiSettingsInterface holdefiSettingsAddress,
+		HoldefiPricesInterface holdefiPricesAddress
+	)
+		public
+	{
 		holdefiSettings = holdefiSettingsAddress;
 		holdefiPrices = holdefiPricesAddress;
+		holdefiCollaterals = new HoldefiCollaterals();
 	}
 
 	modifier isNotETHAddress(address asset) {
