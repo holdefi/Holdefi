@@ -9,13 +9,13 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "HoldefiCo",
+  "author": "Holdefi Team",
   "license": "ISC",
   "dependencies": {
     "bignumber.js": "^9.0.0",
-    "truffle-security": "^1.6.2"
+    "truffle-security": "^1.7.3"
   },
   "devDependencies": {
-    "@openzeppelin/test-helpers": "^0.5.4"
+    "@openzeppelin/test-helpers": "^0.5.6"
   }
 }
