@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
 
-import "./SafeMath.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./HoldefiPausableOwnable.sol";
 
 // File: contracts/HoldefiPrices.sol
@@ -21,13 +22,6 @@ interface HoldefiSettingsInterface {
 interface HoldefiCollateralsInterface {
 	function withdraw(address collateral, address payable recipient, uint256 amount) external;
 }
-
-interface ERC20 {
-    function transfer(address recipient, uint256 amount) external returns(bool success);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns(bool success);
-}
-
-
 
  // Main Holdefi contract.
  // The address of ETH asset considered as 0x00 in this contract.
@@ -769,14 +763,14 @@ contract Holdefi is HoldefiPausableOwnable {
 			(success, ) = receiver.call{value:amount}("");
 		}
 		else {
-			ERC20 token = ERC20(asset);
+			IERC20 token = IERC20(asset);
 			success = token.transfer(receiver, amount);
 		}
 		require (success, "Cannot Transfer");
 	}
 
 	function transferToHoldefi(address receiver, address asset, uint256 amount) internal {
-		ERC20 token = ERC20(asset);
+		IERC20 token = IERC20(asset);
 		bool success = token.transferFrom(msg.sender, receiver, amount);
 		require (success, "Cannot Transfer");
 	}

@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
 
-interface ERC20 {
-
-    function transfer(address recipient, uint256 amount) external returns (bool);
-}
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // This contract holds collateralls
 contract HoldefiCollaterals {
@@ -34,7 +31,7 @@ contract HoldefiCollaterals {
 			(success, ) = recipient.call{value:amount}("");
 		}
 		else {
-			ERC20 token = ERC20(collateral);
+			IERC20 token = IERC20(collateral);
 			success = token.transfer(recipient, amount);
 		}
 		require (success, "Cannot Transfer");
