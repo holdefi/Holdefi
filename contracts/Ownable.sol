@@ -1,4 +1,5 @@
-pragma solidity ^0.5.16;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.6.12;
 
  // Taking ideas from Open Zeppelin's Pausable contract
 contract Ownable {

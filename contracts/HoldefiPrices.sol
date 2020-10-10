@@ -1,4 +1,5 @@
-pragma solidity ^0.5.16;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.6.12;
 
 import "./SafeMath.sol";
 import "./Ownable.sol";
@@ -48,7 +49,7 @@ contract HoldefiPrices is Ownable {
         setPrice(asset, priceDecimal);
     }
     
-    function() payable external {
+    receive() external payable {
         revert();
     }
 }

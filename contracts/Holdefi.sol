@@ -1,4 +1,5 @@
-pragma solidity ^0.5.16;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.6.12;
 
 import "./SafeMath.sol";
 import "./Ownable.sol";
@@ -251,7 +252,7 @@ contract Holdefi is HoldefiPauser {
 		(bool isActive,,,) = holdefiSettings.getCollateral(collateral);
 		require (isActive, 'Collateral asset is not active');
 
-		(bool success, ) = address(holdefiCollaterals).call.value(amount)("");
+		(bool success, ) = address(holdefiCollaterals).call{value:amount}("");
 		require (success, 'Cannot Transfer ETH');
 
 		collateralizeInternal(collateral, amount);
@@ -817,7 +818,7 @@ contract Holdefi is HoldefiPauser {
 		fixPrices = true;
 	}
 
-	function() payable external {
+    receive() external payable {
         revert();
     }
 }

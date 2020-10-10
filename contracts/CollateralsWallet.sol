@@ -1,4 +1,5 @@
-pragma solidity ^0.5.16;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.6.12;
 
 interface ERC20 {
 
@@ -30,7 +31,7 @@ contract CollateralsWallet {
 		}
 	}
 
-	function () payable external {
+	receive() external payable {
 		require (msg.sender == holdefiContract,'Sender should be holdefi contract');
 	}
 }
