@@ -6,10 +6,12 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./HoldefiPausableOwnable.sol";
 
-// File: contracts/HoldefiPrices.sol
+/// @notice File: contracts/HoldefiPrices.sol
 interface HoldefiPricesInterface {
-	function getPrice(address token) external view returns(uint256 price);	
+	function getAssetValueFromAmount(address asset, uint256 amount) external view returns(uint256 value);
+	function getAssetAmountFromValue(address asset, uint256 value) external view returns(uint256 amount);	
 }
+
 
 // File: contracts/HoldefiSettings.sol
 interface HoldefiSettingsInterface {
@@ -276,10 +278,9 @@ contract Holdefi is HoldefiPausableOwnable {
 			maxWithdraw = balance;
 		}
 		else {
-			uint256 collateralPrice = holdefiPrices.getPrice(collateral);
 			uint256 valueToLoanRate = holdefiSettings.collateralAssets(collateral).valueToLoanRate;
 			uint256 totalCollateralValue = totalBorrowValue.mul(valueToLoanRate).div(rateDecimals);	
-			uint256 collateralNedeed = totalCollateralValue.div(collateralPrice);
+			uint256 collateralNedeed = holdefiPrices.getAssetAmountFromValue(collateral, totalCollateralValue);
 
 			maxWithdraw = balance.sub(collateralNedeed);
 		}
@@ -309,9 +310,8 @@ contract Holdefi is HoldefiPausableOwnable {
 			'Amount should be less than cash'
 		);
 
-		(,,uint256 borrowPowerValue,,) = getAccountCollateral(msg.sender, collateral);	
-		uint256 assetToBorrowPrice = holdefiPrices.getPrice(market);
-		uint256 assetToBorrowValue = amount.mul(assetToBorrowPrice);
+		(,,uint256 borrowPowerValue,,) = getAccountCollateral(msg.sender, collateral);
+		uint256 assetToBorrowValue = holdefiPrices.getAssetValueFromAmount(market, amount);
 		require (borrowPowerValue > assetToBorrowValue, 'Borrow power should be more than new borrow value');
 
 		(,uint256 interest,uint256 currentBorrowIndex) = getAccountBorrow(msg.sender, market, collateral);
@@ -426,10 +426,10 @@ contract Holdefi is HoldefiPausableOwnable {
 		
 		require (underCollateral || (timeSinceLastActivity > secondsPerYear), 'User should be under collateral or time is over');
 
-		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
 		uint256 penaltyRate = holdefiSettings.collateralAssets(collateral).penaltyRate;
 		uint256 liquidatedCollateralValue = totalBorrowValue.mul(penaltyRate).div(rateDecimals);
-		uint256 liquidatedCollateral = liquidatedCollateralValue.div(collateralPrice);
+		uint256 liquidatedCollateral = 
+			holdefiPrices.getAssetAmountFromValue(collateral, liquidatedCollateralValue);
 
 		if (liquidatedCollateral > collaterals[borrower][collateral].balance) {
 			liquidatedCollateral = collaterals[borrower][collateral].balance;
@@ -483,13 +483,10 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Returns amount of discounted collateral that buyer can buy by paying `market` asset
 	function getDiscountedCollateralAmount (address market, address collateral, uint256 marketAmount) public view returns(uint256 collateralAmountWithDiscount) {
-		uint256 marketPrice = holdefiPrices.getPrice(market);
-		uint256 marketValue = marketAmount.mul(marketPrice);
-
-		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
+		uint256 marketValue = holdefiPrices.getAssetValueFromAmount(market, marketAmount);
 		uint256 bonusRate = holdefiSettings.collateralAssets(collateral).bonusRate;
 		uint256 collateralValue = marketValue.mul(bonusRate).div(rateDecimals);
-		collateralAmountWithDiscount = collateralValue.div(collateralPrice);
+		collateralAmountWithDiscount = holdefiPrices.getAssetAmountFromValue(collateral, collateralValue);
 	}
 	
 	// Returns supply and borrow index for a given `market` at current time 
@@ -615,7 +612,6 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 balance;
 		uint256 interest;
 		uint256 totalDebt;
-		uint256 assetPrice;
 		uint256 assetValue;
 		
 		address[] memory marketsList = holdefiSettings.getMarketsList();
@@ -625,10 +621,8 @@ contract Holdefi is HoldefiPausableOwnable {
 			(balance, interest,) = getAccountBorrow(account, market, collateral);
 			totalDebt = balance.add(interest);
 
-			assetPrice = holdefiPrices.getPrice(market);
-			assetValue = totalDebt.mul(assetPrice);
-
-			totalBorrowValue = totalBorrowValue.add(assetValue); //scaled by: 18 (priceDecimal)
+			assetValue = holdefiPrices.getAssetValueFromAmount(market, totalDebt);
+			totalBorrowValue = totalBorrowValue.add(assetValue);
 		}
 	}
 
@@ -636,8 +630,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	function getAccountCollateral(address account, address collateral) public view returns(uint256 balance, uint256 timeSinceLastActivity, uint256 borrowPowerValue, uint256 totalBorrowValue, bool underCollateral) {
 		balance = collaterals[account][collateral].balance;
 
-		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
-		uint256 collateralValue = balance.mul(collateralPrice);
+		uint256 collateralValue = holdefiPrices.getAssetValueFromAmount(collateral, balance);
 		uint256 valueToLoanRate = holdefiSettings.collateralAssets(collateral).valueToLoanRate;
 		uint256 totalBorrowPowerValue = collateralValue.mul(rateDecimals).div(valueToLoanRate);
 		uint256 liquidationThresholdRate = valueToLoanRate.sub(fivePercentLiquidationGap);
@@ -658,24 +651,22 @@ contract Holdefi is HoldefiPausableOwnable {
 	// Returns liquidation reserve
 	function getLiquidationReserve (address collateral) public view returns(uint256 reserve) {
 		address market;
-		uint256 assetPrice;
 		uint256 assetValue;
 		uint256 totalDebtValue = 0;
 
 		address[] memory marketsList = holdefiSettings.getMarketsList();
 		for (uint256 i=0; i<marketsList.length; i++) {
 			market = marketsList[i];
-
-			assetPrice = holdefiPrices.getPrice(market);
-			assetValue = marketDebt[collateral][market].mul(assetPrice);
-
+			assetValue = holdefiPrices.getAssetValueFromAmount(market, marketDebt[collateral][market]);
 			totalDebtValue = totalDebtValue.add(assetValue); 
 		}
 
-		uint256 collateralPrice = holdefiPrices.getPrice(collateral);
 		uint256 bonusRate = holdefiSettings.collateralAssets(collateral).bonusRate;
 		uint256 totalDebtCollateralValue = totalDebtValue.mul(bonusRate).div(rateDecimals);
-		uint256 liquidatedCollateralNeeded = totalDebtCollateralValue.div(collateralPrice);
+		uint256 liquidatedCollateralNeeded = holdefiPrices.getAssetAmountFromValue(
+			collateral,
+			totalDebtCollateralValue
+		);
 		
 		if (collateralAssets[collateral].totalLiquidatedCollateral > liquidatedCollateralNeeded) {
 			reserve = collateralAssets[collateral].totalLiquidatedCollateral.sub(liquidatedCollateralNeeded);

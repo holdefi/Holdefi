@@ -1,57 +1,105 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
 
+import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./HoldefiOwnable.sol";
 
-interface ETHMedianizerInterface {
-
-   function read() external view returns(uint256 price);
+interface ERC20DecimalInterface {
+    function decimals () external view returns(uint256 res);
 }
 
- //This contract will be changed before adding ERC20 tokens that are not stable coin
 contract HoldefiPrices is HoldefiOwnable {
 
     using SafeMath for uint256;
 
     address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    uint256 constant public priceDecimal = 10**18;
+    uint256 constant public valueDecimals = 30;
+
+    struct Asset {
+        uint256 decimals;
+        AggregatorV3Interface priceContract;
+    }
    
-    mapping(address => uint) public assetPrices;
+    mapping(address => Asset) public assets;
 
-    ETHMedianizerInterface public ethMedianizer;
+    event NewPriceAggregator(address indexed asset, uint256 decimals, address priceAggregator);
 
-    event PriceChanged(address asset, uint256 newPrice);
-
-    constructor(address newOwnerChanger, ETHMedianizerInterface ethMedianizerContract) public HoldefiOwnable(newOwnerChanger) {
-        ethMedianizer = ethMedianizerContract;
+    constructor(address ownerChanger) HoldefiOwnable(ownerChanger) public {
+        assets[ethAddress].decimals = 18;
     }
 
-    // Returns price of selected asset
-    function getPrice(address asset) external view returns(uint256 price) {
-    	if (asset == ethAddress){
-    		price = uint(ethMedianizer.read());
-    	}
+    receive() payable external {
+        revert();
+    }
+
+    function getPrice(address asset) public view returns (uint256 price, uint256 priceDecimals) {
+        if (asset == ethAddress){
+            price = 1;
+            priceDecimals = 0;
+        }
         else {
-            price = assetPrices[asset];
+            (,int aggregatorPrice,,,) = assets[asset].priceContract.latestRoundData();
+            priceDecimals = assets[asset].priceContract.decimals();
+            if (aggregatorPrice > 0) {
+                price = uint(aggregatorPrice);
+            }
+            else {
+                revert();
+            }
         }
     }
 
-     // TODO: This function should be internal for the first version of priceFeed
-    function setPrice(address asset, uint256 newPrice) public onlyOwner {
-        require (asset != ethAddress,'Price of ETH can not be changed');
+    function setPriceAggregator(address asset, uint256 decimals, AggregatorV3Interface priceContractAddress)
+        external
+        onlyOwner
+    { 
+        require (asset != ethAddress, "Asset should not be ETH");
+        assets[asset].priceContract = priceContractAddress;
 
-        assetPrices[asset] = newPrice;
-        emit PriceChanged(asset, newPrice);
+        try ERC20DecimalInterface(asset).decimals() returns (uint256 tokenDecimals) {
+            assets[asset].decimals = tokenDecimals;
+        }
+        catch {
+            assets[asset].decimals = decimals;
+        }
+        emit NewPriceAggregator(asset, decimals, address(priceContractAddress));
     }
 
-    // Called by owner to add new stable token at 1$ price
-    function addStableCoin(address asset) external onlyOwner {
-        setPrice(asset, priceDecimal);
+    function getAssetValueFromAmount(address asset, uint256 amount) external view returns (uint256 res) {
+        uint256 decimalsDiff;
+        uint256 decimalsScale;
+
+        (uint256 price, uint256 priceDecimals) = getPrice(asset);
+        uint256 calValueDecimals = priceDecimals.add(assets[asset].decimals);
+        if (valueDecimals > calValueDecimals){
+            decimalsDiff = valueDecimals.sub(calValueDecimals);
+            decimalsScale =  10 ** decimalsDiff;
+            res = amount.mul(price).mul(decimalsScale);
+        }
+        else {
+            decimalsDiff = calValueDecimals.sub(valueDecimals);
+            decimalsScale =  10 ** decimalsDiff;
+            res = amount.mul(price).div(decimalsScale);
+        }   
     }
-    
-    receive() external payable {
-        revert();
+
+    function getAssetAmountFromValue(address asset, uint256 value) external view returns (uint256 res) {
+        uint256 decimalsDiff;
+        uint256 decimalsScale;
+
+        (uint256 price, uint256 priceDecimals) = getPrice(asset);
+        uint256 calValueDecimals = priceDecimals.add(assets[asset].decimals);
+        if (valueDecimals > calValueDecimals){
+            decimalsDiff = valueDecimals.sub(calValueDecimals);
+            decimalsScale =  10 ** decimalsDiff;
+            res = value.div(decimalsScale).div(price);
+        }
+        else {
+            decimalsDiff = calValueDecimals.sub(valueDecimals);
+            decimalsScale =  10 ** decimalsDiff;
+            res = value.mul(decimalsScale).div(price);
+        }   
     }
 }
