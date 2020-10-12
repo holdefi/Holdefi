@@ -26,6 +26,7 @@ interface HoldefiInterface {
 	function holdefiSettings() external view returns (address contractAddress);
 	function updateBorrowIndex(address market) external;
 	function updatePromotion(address market) external;
+	function reserveSettlement (address market) external;
 }
 
 
@@ -42,6 +43,8 @@ contract HoldefiSettings is HoldefiOwnable {
 
 		uint256 suppliersShareRate;
 		uint256 suppliersShareRateUpdateTime;
+
+		uint256 promotionRate;
 	}
 
 	struct CollateralSettings {
@@ -59,23 +62,25 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	uint256 constant public rateDecimals = 10 ** 4;
 
-	uint256 constant public periodBetweenUpdates = 864000;      // seconds per ten days
+	uint256 constant public periodBetweenUpdates = 864000;      	// seconds per ten days
 
-	uint256 constant public maxBorrowRate = 4000;      // 40%
+	uint256 constant public maxBorrowRate = 4000;      				// 40%
 
-	uint256 constant public borrowRateMaxIncrease = 500;      // 5%
+	uint256 constant public borrowRateMaxIncrease = 500;      		// 5%
 
-	uint256 constant public minSuppliersShareRate = 5000;      // 50%
+	uint256 constant public minSuppliersShareRate = 5000;      		// 50%
 
-	uint256 constant public suppliersShareRateMaxDecrease = 500;      // 5%
+	uint256 constant public suppliersShareRateMaxDecrease = 500;	// 5%
 
-	uint256 constant public maxValueToLoanRate = 20000;      // 200%
+	uint256 constant public maxValueToLoanRate = 20000;      		// 200%
 
-	uint256 constant public valueToLoanRateMaxIncrease = 500;      // 5%
+	uint256 constant public valueToLoanRateMaxIncrease = 500;      	// 5%
 
-	uint256 constant public maxPenaltyRate = 13000;      // 130%
+	uint256 constant public maxPenaltyRate = 13000;      			// 130%
 
-	uint256 constant public penaltyRateMaxIncrease = 500;      // 5%
+	uint256 constant public penaltyRateMaxIncrease = 500;      		// 5%
+
+	uint256 constant public maxPromotionRate = 3000;				// 30%
 
 	uint256 constant public maxListsLenght = 25;
 		
@@ -101,6 +106,8 @@ contract HoldefiSettings is HoldefiOwnable {
 	event BorrowRateChanged(address market, uint256 newRate, uint256 oldRate);
 
 	event SuppliersShareRateChanged(address  market, uint256 newRate, uint256 oldRate);
+
+	event PromotionRateChanged(address market, uint256 newRate, uint256 oldRate);
 
 	event ValueToLoanRateChanged(address collateral, uint256 newRate, uint256 oldRate);
 
@@ -155,18 +162,42 @@ contract HoldefiSettings is HoldefiOwnable {
 		holdefiContract = holdefiContractAddress;
 	}
 
-	function getInterests (address market, uint256 totalSupply, uint256 totalBorrow) external view returns(uint256 borrowRate, uint256 supplyRate) {
+	function getInterests (address market)
+		external
+		view
+		returns (uint256 borrowRate, uint256 supplyRateBase, uint256 promotionRate)
+	{
+		uint256 totalBorrow = holdefiContract.marketAssets(market).totalBorrow;
+		uint256 totalSupply = holdefiContract.marketAssets(market).totalSupply;
 		borrowRate = marketAssets[market].borrowRate;
-		uint256 suppliersShareRate = marketAssets[market].suppliersShareRate;
-		if (totalSupply == 0){
-			supplyRate = 0;
+
+		if (totalSupply == 0) {
+			supplyRateBase = 0;
 		}
 		else {
 			uint256 totalInterestFromBorrow = totalBorrow.mul(borrowRate);
-			uint256 suppliersShare = totalInterestFromBorrow.mul(suppliersShareRate);
+			uint256 suppliersShare = totalInterestFromBorrow.mul(marketAssets[market].suppliersShareRate);
 			suppliersShare = suppliersShare.div(rateDecimals);
-			supplyRate = suppliersShare.div(totalSupply);
+			supplyRateBase = suppliersShare.div(totalSupply);
 		}
+		promotionRate = marketAssets[market].promotionRate;
+	}
+
+	function setPromotionRate (address market, uint256 newPromotionRate) external onlyOwner {
+		require (newPromotionRate <= maxPromotionRate, "Rate should be in allowed range");
+
+		holdefiContract.updatePromotion(market);
+		holdefiContract.reserveSettlement(market);
+
+		emit PromotionRateChanged(market, newPromotionRate, marketAssets[market].promotionRate);
+		marketAssets[market].promotionRate = newPromotionRate;
+	}
+
+	function resetPromotionRate (address market) external {
+		require (msg.sender == address(holdefiContract), "Sender is not Holdefi contract");
+
+		emit PromotionRateChanged(market, 0, marketAssets[market].promotionRate);
+		marketAssets[market].promotionRate = 0;
 	}
 
 	function setBorrowRate (address market, uint256 newBorrowRate) external onlyOwner marketIsExist(market) {
