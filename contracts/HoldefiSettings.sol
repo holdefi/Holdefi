@@ -1,11 +1,29 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
+pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./HoldefiOwnable.sol";
 
 
 interface HoldefiInterface {
+
+	struct Market {
+		uint256 totalSupply;
+		uint256 supplyIndex;
+		uint256 supplyIndexUpdateTime;
+
+		uint256 totalBorrow;
+		uint256 borrowIndex;
+		uint256 borrowIndexUpdateTime;
+
+		uint256 promotionReserveScaled;
+		uint256 promotionReserveLastUpdateTime;
+		uint256 promotionDebtScaled;
+		uint256 promotionDebtLastUpdateTime;
+	}
+
+	function marketAssets(address market) external view returns (Market memory);
 
 	function updateSupplyIndex(address market) external;
 
@@ -45,28 +63,29 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	uint256 constant public maxListsLenght = 25;
 
-	// Markets Features 
-	struct MarketSettings {
-		bool isActive;
 
+	struct MarketSettings {
+		bool isExist;
+		bool isActive;
 		uint256 borrowRate;
 		uint256 borrowRateUpdateTime;
 
 		uint256 suppliersShareRate;
-		uint256 suppliersShareRateUpdateTime;	
+		uint256 suppliersShareRateUpdateTime;
 	}
 
-	// Collaterals Features
+
 	struct CollateralSettings {
+		bool isExist;
 		bool isActive;
 
-		uint256 valueToLoanRate;   // Collateral liquidation threshold
+		uint256 valueToLoanRate;
 		uint256 VTLUpdateTime;
 
-		uint256 penaltyRate; 		// Portion of collateral being liquidated during liquidation
+		uint256 penaltyRate;
 		uint256 penaltyUpdateTime;
-		
-		uint256 bonusRate;		    // Bonus for buyers who buy liquidated collaterals
+
+		uint256 bonusRate;
 	}
 
 	// Asset address => Market features 
@@ -78,17 +97,18 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	HoldefiInterface public holdefiContract;
 
+
+	event MarketActivationChanged(address market, bool status);
+
+	event CollateralActivationChanged(address collateral, bool status);
+
+	event MarketExistenceChanged(address market, bool status);
+
+	event CollateralExistenceChanged(address collateral, bool status);
+
 	event BorrowRateChanged(address market, uint256 newRate);
 
 	event SuppliersShareRateChanged(address market, uint256 newRate);
-
-	event MarketAdded(address market);
-
-	event MarketRemoved(address market);
-
-	event CollateralAdded(address collateral, uint256 valueToLoanRate, uint256 penaltyRate, uint256 bonusRate);
-
-	event CollateralRemoved(address collateral);
 
 	event ValueToLoanRateChanged(address collateral, uint256 newRate);
 
@@ -96,9 +116,41 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	event BonusRateChanged(address collateral, uint256 newRate);
 
+
+	modifier marketIsExist(address market) {
+        require (marketAssets[market].isExist, "The market is not exist");
+        _;
+    }
+
+    modifier collateralIsExist(address collateral) {
+        require (collateralAssets[collateral].isExist, "The collateral is not exist");
+        _;
+    }
+
+	function activateMarket (address market) public onlyOwner marketIsExist(market) {
+		marketAssets[market].isActive = true;
+		emit MarketActivationChanged(market, true);
+	}
+
+	function deactivateMarket (address market) public onlyOwner marketIsExist(market) {
+		marketAssets[market].isActive = false;
+		emit MarketActivationChanged(market, false);
+	}
+
+
+	function activateCollateral (address collateral) public onlyOwner collateralIsExist(collateral) {
+		collateralAssets[collateral].isActive = true;
+		emit CollateralActivationChanged(collateral, true);
+	}
+
+	function deactivateCollateral (address collateral) public onlyOwner collateralIsExist(collateral) {
+		collateralAssets[collateral].isActive = false;
+		emit CollateralActivationChanged(collateral, false);
+	}
+
 	// Disposable function to Get in touch with Holdefi contract
 	function setHoldefiContract(HoldefiInterface holdefiContractAddress) external onlyOwner {
-		require (address(holdefiContract) == address(0),'Should be set once');
+		require (address(holdefiContract) == address(0), "Should be set once");
 		holdefiContract = holdefiContractAddress;
 	}
 
@@ -124,7 +176,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	}
 	
 	// Owner can set a new borrow rate
-	function setBorrowRate (address market, uint256 newBorrowRate) external onlyOwner {
+	function setBorrowRate (address market, uint256 newBorrowRate) external onlyOwner marketIsExist(market) {
 		require (newBorrowRate <= maxBorrowRate,'Rate should be less than max');
 		uint256 currentTime = block.timestamp;
 
@@ -145,7 +197,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	}
 
 	// Owner can set a new 'suppliers share rate' (Supplier's share of borrower's interest).
-	function setSuppliersShareRate (address market, uint256 newSuppliersShareRate) external onlyOwner {
+	function setSuppliersShareRate (address market, uint256 newSuppliersShareRate) external onlyOwner marketIsExist(market) {
 		require (newSuppliersShareRate >= minSuppliersShareRate && newSuppliersShareRate <= rateDecimals,'Rate should be in allowed range');
 		uint256 currentTime = block.timestamp;
 
@@ -167,42 +219,46 @@ contract HoldefiSettings is HoldefiOwnable {
 	// Owner can add a new asset as a market.
 	function addMarket (address market, uint256 borrowRate, uint256 suppliersShareRate) external onlyOwner {
 		require (marketsList.length < maxListsLenght, "Market list is full");
-		require(!marketAssets[market].isActive, "Market exists");
+		require(!marketAssets[market].isExist, "Market exists");
 		require (borrowRate <= maxBorrowRate
 			&& suppliersShareRate >= minSuppliersShareRate
 			&& suppliersShareRate <= rateDecimals
 			, 'Rate should be in allowed range');
 		
+		marketAssets[market].isExist = true;
 		marketAssets[market].isActive = true;
 		marketAssets[market].borrowRate = borrowRate;
 		marketAssets[market].borrowRateUpdateTime = block.timestamp;
 		marketAssets[market].suppliersShareRate = suppliersShareRate;
 		marketAssets[market].suppliersShareRateUpdateTime = block.timestamp;
 	
-		bool exist = false;
-		for (uint256 i=0; i<marketsList.length; i++) {
+		marketsList.push(market);
+		emit MarketExistenceChanged(market, true);
+	}
+
+	// Owner can remove a market asset
+	function removeMarket (address market) external onlyOwner marketIsExist(market) {		
+		uint256 totalBorrow = holdefiContract.marketAssets(market).totalBorrow;
+		require (totalBorrow == 0, "Total borrow is not zero");
+		
+		holdefiContract.updateBorrowIndex(market);
+		holdefiContract.updateSupplyIndex(market);
+		holdefiContract.updatePromotionReserve(market);
+
+		for (uint256 i = 0; i < marketsList.length ; i++) {
 			if (marketsList[i] == market){
-				exist = true;
+				delete marketsList[i];
 				break;
 			}
 		}
 
-		if (!exist) {
-			marketsList.push(market);
-		}
-
-		emit MarketAdded(market);
-	}
-
-	// Owner can remove a market asset
-	function removeMarket (address market) external onlyOwner {		
-		marketAssets[market].isActive = false;
-		emit MarketRemoved(market);
+		delete marketAssets[market];
+		emit MarketExistenceChanged(market, false);
 	}
 
 	// Owner can add a collateral asset with its VTL, penalty and bonus rate
-	function addCollateral (address collateralAsset, uint256 valueToLoanRate, uint256 penaltyRate, uint256 bonusRate) external onlyOwner {
-		require(!collateralAssets[collateralAsset].isActive, "Collateral exists");		
+	function addCollateral (address collateral, uint256 valueToLoanRate, uint256 penaltyRate, uint256 bonusRate) external onlyOwner {
+		require(!collateralAssets[collateral].isExist, "Collateral exists");		
 		require (valueToLoanRate <= maxValueToLoanRate
 				&& penaltyRate <= maxPenaltyRate
 				&& penaltyRate <= valueToLoanRate
@@ -210,74 +266,69 @@ contract HoldefiSettings is HoldefiOwnable {
 				&& bonusRate >= rateDecimals
 			,'Rate should be in allowed range');
 		
-		collateralAssets[collateralAsset].isActive = true;
-		collateralAssets[collateralAsset].valueToLoanRate = valueToLoanRate;
-		collateralAssets[collateralAsset].penaltyRate  = penaltyRate;
-	    collateralAssets[collateralAsset].bonusRate = bonusRate;
-	    collateralAssets[collateralAsset].VTLUpdateTime = block.timestamp;
-	    collateralAssets[collateralAsset].penaltyUpdateTime = block.timestamp;
-	    	
-		emit CollateralAdded(collateralAsset, valueToLoanRate, penaltyRate, bonusRate);
-	}
+		collateralAssets[collateral].isExist = true;
+		collateralAssets[collateral].isActive = true;
+		collateralAssets[collateral].valueToLoanRate = valueToLoanRate;
+		collateralAssets[collateral].penaltyRate  = penaltyRate;
+	    collateralAssets[collateral].bonusRate = bonusRate;
+	    collateralAssets[collateral].VTLUpdateTime = block.timestamp;
+	    collateralAssets[collateral].penaltyUpdateTime = block.timestamp;
 
-	// Owner can remove a collateral asset
-	function removeCollateral (address collateralAsset) external onlyOwner {
-		collateralAssets[collateralAsset].isActive = false;
-		emit CollateralRemoved(collateralAsset);
+		emit CollateralExistenceChanged(collateral, true);
 	}
 	
 	// Owner can set a new VTL rate (Liquidation threshold) for each collateral asset
-	function setValueToLoanRate (address collateralAsset, uint256 newValueToLoanRate) external onlyOwner {
+	function setValueToLoanRate (address collateral, uint256 newValueToLoanRate) external onlyOwner collateralIsExist(collateral) {
 		require (
 			newValueToLoanRate <= maxValueToLoanRate &&
-			collateralAssets[collateralAsset].penaltyRate.add(fivePercentLiquidationGap) <= newValueToLoanRate
+			collateralAssets[collateral].penaltyRate.add(fivePercentLiquidationGap) <= newValueToLoanRate
 			,'Rate should be in allowed range'
 		);
 		
 		uint256 currentTime = block.timestamp;
-		if (newValueToLoanRate > collateralAssets[collateralAsset].valueToLoanRate) {
-			uint256 deltaTime = currentTime.sub(collateralAssets[collateralAsset].VTLUpdateTime);
+		if (newValueToLoanRate > collateralAssets[collateral].valueToLoanRate) {
+			uint256 deltaTime = currentTime.sub(collateralAssets[collateral].VTLUpdateTime);
 			require (deltaTime >= periodBetweenUpdates,'Increasing rate is not allowed at this time');
-			uint256 maxIncrease = collateralAssets[collateralAsset].valueToLoanRate.add(valueToLoanRateMaxIncrease);
+			uint256 maxIncrease = collateralAssets[collateral].valueToLoanRate.add(valueToLoanRateMaxIncrease);
 			require (newValueToLoanRate <= maxIncrease,'Rate should be increased less than max allowed');
 		}
-	    collateralAssets[collateralAsset].valueToLoanRate = newValueToLoanRate;
-	    collateralAssets[collateralAsset].VTLUpdateTime = currentTime;
+	    collateralAssets[collateral].valueToLoanRate = newValueToLoanRate;
+	    collateralAssets[collateral].VTLUpdateTime = currentTime;
 
-	    emit ValueToLoanRateChanged(collateralAsset, newValueToLoanRate);
+	    emit ValueToLoanRateChanged(collateral, newValueToLoanRate);
 	}
 
 	// Owner can set penalty rate for each collateral asset
-	function setPenaltyRate (address collateralAsset ,uint256 newPenaltyRate) external onlyOwner {
+	function setPenaltyRate (address collateral ,uint256 newPenaltyRate) external onlyOwner collateralIsExist(collateral) {
 		require (
 			newPenaltyRate <= maxPenaltyRate && 
-			newPenaltyRate.add(fivePercentLiquidationGap) <= collateralAssets[collateralAsset].valueToLoanRate && 
-			collateralAssets[collateralAsset].bonusRate <= newPenaltyRate
+			newPenaltyRate.add(fivePercentLiquidationGap) <= collateralAssets[collateral].valueToLoanRate && 
+			collateralAssets[collateral].bonusRate <= newPenaltyRate
 			,'Rate should be in allowed range'
 		);
 
 		uint256 currentTime = block.timestamp;
-		if (newPenaltyRate > collateralAssets[collateralAsset].penaltyRate){
-			uint256 deltaTime = currentTime.sub(collateralAssets[collateralAsset].penaltyUpdateTime);
+		if (newPenaltyRate > collateralAssets[collateral].penaltyRate){
+			uint256 deltaTime = currentTime.sub(collateralAssets[collateral].penaltyUpdateTime);
 			require (deltaTime >= periodBetweenUpdates,'Increasing rate is not allowed at this time');
-			uint256 maxIncrease = collateralAssets[collateralAsset].penaltyRate.add(penaltyRateMaxIncrease);
+			uint256 maxIncrease = collateralAssets[collateral].penaltyRate.add(penaltyRateMaxIncrease);
 			require (newPenaltyRate <= maxIncrease,'Rate should be increased less than max allowed');
 		}
-	    collateralAssets[collateralAsset].penaltyRate  = newPenaltyRate;
-	    collateralAssets[collateralAsset].penaltyUpdateTime = currentTime;
+	    collateralAssets[collateral].penaltyRate = newPenaltyRate;
+	    collateralAssets[collateral].penaltyUpdateTime = currentTime;
 
-	    emit PenaltyRateChanged(collateralAsset, newPenaltyRate);
+	    emit PenaltyRateChanged(collateral, newPenaltyRate);
 	}
 
 	// Owner can set bonus rate for each collateral asset
-	function setBonusRate (address collateralAsset, uint256 newBonusRate) external onlyOwner {
-		require (newBonusRate <= collateralAssets[collateralAsset].penaltyRate
+	function setBonusRate (address collateral, uint256 newBonusRate) external onlyOwner collateralIsExist(collateral) {
+		require (newBonusRate <= collateralAssets[collateral].penaltyRate
 				&& newBonusRate >= rateDecimals
 				,'Rate should be in allowed range');
 		
-	    collateralAssets[collateralAsset].bonusRate = newBonusRate;
+	    collateralAssets[collateral].bonusRate = newBonusRate;
 
-	    emit BonusRateChanged(collateralAsset, newBonusRate);
+	    emit BonusRateChanged(collateral, newBonusRate);
 	}
 
 	receive() external payable {
