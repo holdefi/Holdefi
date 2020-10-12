@@ -225,20 +225,16 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Withdraw ERC20 assets from a market (include interests).
 	function withdrawSupply (address market, uint256 amount) external whenNotPaused("withdrawSupply") {
-		(uint256 balance,uint256 interest,uint256 currentSupplyIndex) = getAccountSupply(msg.sender, market);
-		
-		uint256 transferAmount;
+		(uint256 balance, uint256 interest, uint256 currentSupplyIndex) = getAccountSupply(msg.sender, market);
 		uint256 totalSuppliedBalance = balance.add(interest);
+		require (totalSuppliedBalance != 0, "Total balance should not be zero");
 
-		require (totalSuppliedBalance != 0, 'Total balance should not be zero');
-		if (amount <= totalSuppliedBalance){
-			transferAmount = amount;
-		}
-		else {
+		uint256 transferAmount = amount;
+		if (transferAmount > totalSuppliedBalance){
 			transferAmount = totalSuppliedBalance;
 		}
 
-		uint256 remaining;
+		uint256 remaining = 0;
 		if (transferAmount <= interest) {
 			supplies[msg.sender][market].accumulatedInterest = interest.sub(transferAmount);
 		}
@@ -284,23 +280,16 @@ contract Holdefi is HoldefiPausableOwnable {
 		(uint256 balance, ,uint256 borrowPowerValue,uint256 totalBorrowValue,) = getAccountCollateral(msg.sender, collateral);	
 		require (borrowPowerValue != 0, 'Borrow power should not be zero');
 
-		uint256 maxWithdraw;
-		if (totalBorrowValue == 0) {
-			maxWithdraw = balance;
-		}
-		else {
+		uint256 collateralNedeed = 0;
+		if (totalBorrowValue != 0) {
 			uint256 valueToLoanRate = holdefiSettings.collateralAssets(collateral).valueToLoanRate;
-			uint256 totalCollateralValue = totalBorrowValue.mul(valueToLoanRate).div(rateDecimals);	
-			uint256 collateralNedeed = holdefiPrices.getAssetAmountFromValue(collateral, totalCollateralValue);
-
-			maxWithdraw = balance.sub(collateralNedeed);
+			uint256 totalCollateralValue = totalBorrowValue.mul(valueToLoanRate).div(rateDecimals);
+			collateralNedeed = holdefiPrices.getAssetAmountFromValue(collateral, totalCollateralValue);
 		}
 
-		uint256 transferAmount;
-		if (amount < maxWithdraw){
-			transferAmount = amount;
-		}
-		else {
+		uint256 maxWithdraw = balance.sub(collateralNedeed);
+		uint256 transferAmount = amount;
+		if (transferAmount > maxWithdraw){
 			transferAmount = maxWithdraw;
 		}
 
@@ -345,7 +334,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	function repayBorrowInternal (address market, address collateral, uint256 amount) internal {
 		(uint256 balance,uint256 interest,uint256 currentBorrowIndex) = getAccountBorrow(msg.sender, market, collateral);
 		
-		uint256 remaining;
+		uint256 remaining = 0;
 		if (amount <= interest) {
 			borrows[msg.sender][collateral][market].accumulatedInterest = interest.sub(amount);
 		}
@@ -368,14 +357,11 @@ contract Holdefi is HoldefiPausableOwnable {
 	// Repay borrow a `market` token based on a `collateral` power
 	function repayBorrow (address market, address collateral, uint256 amount) external isNotETHAddress(market) whenNotPaused("repayBorrow") {
 		(uint256 balance, uint256 interest,) = getAccountBorrow(msg.sender, market, collateral);
-		
-		uint256 transferAmount;
 		uint256 totalBorrowedBalance = balance.add(interest);
 		require (totalBorrowedBalance != 0, 'Total balance should not be zero');
-		if (amount <= totalBorrowedBalance){
-			transferAmount = amount;
-		}
-		else {
+
+		uint256 transferAmount = amount;
+		if (transferAmount > totalBorrowedBalance){
 			transferAmount = totalBorrowedBalance;
 		}
 
@@ -386,24 +372,18 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Repay borrow ETH based on a `collateral` power
 	function repayBorrow (address collateral) payable external whenNotPaused("repayBorrow") {
-		address market = ethAddress;
-		uint256 amount = msg.value;		
-
-		(uint256 balance,uint256 interest,) = getAccountBorrow(msg.sender, market, collateral);
-		
-		uint256 transferAmount;
+		(uint256 balance,uint256 interest,) = getAccountBorrow(msg.sender, ethAddress, collateral);
 		uint256 totalBorrowedBalance = balance.add(interest);
 		require (totalBorrowedBalance != 0, 'Total balance should not be zero');
-		if (amount <= totalBorrowedBalance) {
-			transferAmount = amount;
-		}
-		else {
+
+		uint256 transferAmount = msg.value;
+		if (transferAmount > totalBorrowedBalance) {
 			transferAmount = totalBorrowedBalance;
-			uint256 extra = amount.sub(totalBorrowedBalance);
+			uint256 extra = msg.value.sub(totalBorrowedBalance);
 			transferFromHoldefi(msg.sender, ethAddress, extra);
 		}
 
-		repayBorrowInternal(market, collateral, transferAmount);
+		repayBorrowInternal(ethAddress, collateral, transferAmount);
 	}
 
 	
@@ -503,7 +483,6 @@ contract Holdefi is HoldefiPausableOwnable {
 		supplyRate = supplyRateBase.add(marketAssets[market].promotionRate);
 
 		uint256 deltaTimeSupply = currentTime.sub(marketAssets[market].supplyIndexUpdateTime);
-
 		uint256 deltaTimeBorrow = currentTime.sub(marketAssets[market].borrowIndexUpdateTime);
 
 		uint256 deltaTimeInterest = deltaTimeSupply.mul(supplyRate);
@@ -591,8 +570,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		uint256 deltaInterestIndex = currentSupplyIndex.sub(supplies[account][market].lastInterestIndex);
 		uint256 deltaInterestScaled = deltaInterestIndex.mul(balance);
-		uint256 deltaInterest = deltaInterestScaled.div(secondsPerYear);
-		deltaInterest = deltaInterest.div(rateDecimals);
+		uint256 deltaInterest = deltaInterestScaled.div(secondsPerYear).div(rateDecimals);
 		
 		interest = supplies[account][market].accumulatedInterest.add(deltaInterest);
 	}
@@ -605,8 +583,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		uint256 deltaInterestIndex = currentBorrowIndex.sub(borrows[account][collateral][market].lastInterestIndex);
 		uint256 deltaInterestScaled = deltaInterestIndex.mul(balance);
-		uint256 deltaInterest = deltaInterestScaled.div(secondsPerYear);
-		deltaInterest = deltaInterest.div(rateDecimals);
+		uint256 deltaInterest = deltaInterestScaled.div(secondsPerYear).div(rateDecimals);
 		if (balance > 0) {
 			deltaInterest = deltaInterest.add(oneUnit);
 		}
@@ -622,8 +599,9 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 totalDebt;
 		uint256 assetValue;
 		
+		totalBorrowValue = 0;
 		address[] memory marketsList = holdefiSettings.getMarketsList();
-		for (uint256 i=0; i<marketsList.length; i++) {
+		for (uint256 i = 0 ; i < marketsList.length ; i++) {
 			market = marketsList[i];
 			
 			(balance, interest,) = getAccountBorrow(account, market, collateral);
@@ -636,21 +614,30 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Returns collateral balance, time since last activity, borrow power and total borrow value of an `account` for a given `collateral` 
 	function getAccountCollateral(address account, address collateral) public view returns(uint256 balance, uint256 timeSinceLastActivity, uint256 borrowPowerValue, uint256 totalBorrowValue, bool underCollateral) {
+		uint256 valueToLoanRate = holdefiSettings.collateralAssets(collateral).valueToLoanRate;
+		if (valueToLoanRate == 0) {
+			return (0, 0, 0, 0, false);
+		}
+
 		balance = collaterals[account][collateral].balance;
 
 		uint256 collateralValue = holdefiPrices.getAssetValueFromAmount(collateral, balance);
-		uint256 valueToLoanRate = holdefiSettings.collateralAssets(collateral).valueToLoanRate;
-		uint256 totalBorrowPowerValue = collateralValue.mul(rateDecimals).div(valueToLoanRate);
 		uint256 liquidationThresholdRate = valueToLoanRate.sub(fivePercentLiquidationGap);
+
+		uint256 totalBorrowPowerValue = collateralValue.mul(rateDecimals).div(valueToLoanRate);
 		uint256 liquidationThresholdValue = collateralValue.mul(rateDecimals).div(liquidationThresholdRate);
 
 		totalBorrowValue = getAccountTotalBorrowValue(account, collateral);
 		if (totalBorrowValue > 0) {
 			timeSinceLastActivity = block.timestamp.sub(collaterals[account][collateral].lastUpdateTime);
-		}	
+		}
+
+		borrowPowerValue = 0;
 		if (totalBorrowValue < totalBorrowPowerValue) {
 			borrowPowerValue = totalBorrowPowerValue.sub(totalBorrowValue);
-		}	
+		}
+
+		underCollateral = false;	
 		if (totalBorrowValue > liquidationThresholdValue) {
 			underCollateral = true;
 		}
@@ -684,12 +671,8 @@ contract Holdefi is HoldefiPausableOwnable {
 	// Withdraw liquidation reserve by owner
 	function withdrawLiquidationReserve (address collateral, uint256 amount) external onlyOwner {
 		uint256 maxWithdraw = getLiquidationReserve(collateral);
-		uint256 transferAmount;
-		
-		if (amount <= maxWithdraw){
-			transferAmount = amount;
-		}
-		else {
+		uint256 transferAmount = amount;
+		if (transferAmount > maxWithdraw){
 			transferAmount = maxWithdraw;
 		}
 
