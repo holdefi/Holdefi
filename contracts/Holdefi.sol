@@ -148,9 +148,13 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	event UpdateBorrowIndex(address market, uint256 newBorrowIndex);
 
-	event CollateralLiquidated(address borrower, address collateral, uint256 amount);
-
-	event NewMarketDebt(address borrower, address market, address collateral, uint256 amount);
+	event CollateralLiquidated(
+		address borrower,
+		address market,
+		address collateral,
+		uint256 marketDebt,
+		uint256 liquidatedCollateral
+	);
 
 	event BuyLiquidatedCollateral(address market, address collateral, uint256 marketAmount);
 
@@ -402,54 +406,48 @@ contract Holdefi is HoldefiPausableOwnable {
 		repayBorrowInternal(market, collateral, transferAmount);
 	}
 
-	function clearDebts (address borrower, address collateral) internal {
-		address market;
-		uint256 borrowBalance;
-		uint256 borrowInterest;
-		uint256 borrowInterestIndex;
-		uint256 totalBorrowedBalance;
-		address[] memory marketsList = holdefiSettings.getMarketsList();
-		for (uint256 i=0; i<marketsList.length; i++) {
-			market = marketsList[i];
-			
-			(borrowBalance,borrowInterest,borrowInterestIndex) = getAccountBorrow(borrower, market, collateral);
-			totalBorrowedBalance = borrowBalance.add(borrowInterest);
-			if (totalBorrowedBalance > 0) {
-				borrows[borrower][collateral][market].balance = 0;
-				borrows[borrower][collateral][market].accumulatedInterest = 0;
-				borrows[borrower][collateral][market].lastInterestIndex = borrowInterestIndex;
-				updateSupplyIndex(market);
-				updatePromotionReserve(market);		
-				marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(borrowBalance);
-				marketDebt[collateral][market] = marketDebt[collateral][market].add(totalBorrowedBalance);
-				emit NewMarketDebt(borrower, market, collateral, totalBorrowedBalance);
-			}
-		}
-	}
 	
 	// Liquidate borrower's collateral
-	function liquidateBorrowerCollateral (address borrower, address collateral) external whenNotPaused("liquidateBorrowerCollateral") {
-		(,uint256 timeSinceLastActivity,,uint256 totalBorrowValue, bool underCollateral) = getAccountCollateral(borrower, collateral);
-		
-		require (underCollateral || (timeSinceLastActivity > secondsPerYear), 'User should be under collateral or time is over');
+	function liquidateBorrowerCollateral (address borrower, address market, address collateral)
+		external
+		whenNotPaused("liquidateBorrowerCollateral")
+	{
+		(uint256 borrowBalance, uint256 borrowInterest,) = getAccountBorrow(borrower, market, collateral);
+		require(borrowBalance > 0, "User should have debt for the market");
 
-		uint256 penaltyRate = holdefiSettings.collateralAssets(collateral).penaltyRate;
-		uint256 liquidatedCollateralValue = totalBorrowValue.mul(penaltyRate).div(rateDecimals);
-		uint256 liquidatedCollateral = 
+		(,uint256 timeSinceLastActivity,,, bool underCollateral) = getAccountCollateral(borrower, collateral);
+		require (underCollateral || (timeSinceLastActivity > secondsPerYear),
+			"User should be under collateral or time is over"
+		);
+
+		uint256 totalBorrowedBalance = borrowBalance.add(borrowInterest);
+		uint256 totalBorrowedBalanceValue = holdefiPrices.getAssetValueFromAmount(market, totalBorrowedBalance);
+		
+		uint256 liquidatedCollateralValue = totalBorrowedBalanceValue
+		.mul(holdefiSettings.collateralAssets(collateral).penaltyRate)
+		.div(rateDecimals);
+
+		uint256 liquidatedCollateral =
 			holdefiPrices.getAssetAmountFromValue(collateral, liquidatedCollateralValue);
 
 		if (liquidatedCollateral > collaterals[borrower][collateral].balance) {
 			liquidatedCollateral = collaterals[borrower][collateral].balance;
 		}
 
-		collaterals[borrower][collateral].balance = collaterals[borrower][collateral].balance.sub(liquidatedCollateral);
-		collateralAssets[collateral].totalCollateral = collateralAssets[collateral].totalCollateral.sub(liquidatedCollateral);
-		collateralAssets[collateral].totalLiquidatedCollateral = collateralAssets[collateral].totalLiquidatedCollateral.add(liquidatedCollateral);
-		collaterals[msg.sender][collateral].lastUpdateTime = block.timestamp;
+		collaterals[borrower][collateral].balance =
+			collaterals[borrower][collateral].balance.sub(liquidatedCollateral);
+		collateralAssets[collateral].totalCollateral =
+			collateralAssets[collateral].totalCollateral.sub(liquidatedCollateral);
+		collateralAssets[collateral].totalLiquidatedCollateral =
+			collateralAssets[collateral].totalLiquidatedCollateral.add(liquidatedCollateral);
 
-		clearDebts(borrower, collateral);
+		delete borrows[borrower][collateral][market];
+		updateSupplyIndex(market);
+		updatePromotionReserve(market);	
+		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(borrowBalance);
+		marketDebt[collateral][market] = marketDebt[collateral][market].add(totalBorrowedBalance);
 
-		emit CollateralLiquidated(borrower, collateral, liquidatedCollateral);	
+		emit CollateralLiquidated(borrower, market, collateral, totalBorrowedBalance, liquidatedCollateral);	
 	}
 
 	function buyLiquidatedCollateralInternal (address market, address collateral, uint256 marketAmount, uint256 collateralAmountWithDiscount) internal {

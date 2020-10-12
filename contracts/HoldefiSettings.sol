@@ -43,6 +43,8 @@ contract HoldefiSettings is HoldefiOwnable {
 	// There is 5% gap between value to loan rate and liquidation rate
 	uint256 constant private fivePercentLiquidationGap = 500;
 
+	uint256 constant public maxListsLenght = 25;
+
 	// Markets Features 
 	struct MarketSettings {
 		bool isActive;
@@ -164,6 +166,7 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	// Owner can add a new asset as a market.
 	function addMarket (address market, uint256 borrowRate, uint256 suppliersShareRate) external onlyOwner {
+		require (marketsList.length < maxListsLenght, "Market list is full");
 		require(!marketAssets[market].isActive, "Market exists");
 		require (borrowRate <= maxBorrowRate
 			&& suppliersShareRate >= minSuppliersShareRate
