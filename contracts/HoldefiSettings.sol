@@ -24,8 +24,8 @@ interface HoldefiInterface {
 
 	function marketAssets(address market) external view returns (Market memory);
 	function holdefiSettings() external view returns (address contractAddress);
-	function updateBorrowIndex(address market) external;
-	function updatePromotion(address market) external;
+	function beforeChangeSupplyRate (address market) external;
+	function beforeChangeBorrowRate (address market) external;
 	function reserveSettlement (address market) external;
 }
 
@@ -186,7 +186,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	function setPromotionRate (address market, uint256 newPromotionRate) external onlyOwner {
 		require (newPromotionRate <= maxPromotionRate, "Rate should be in allowed range");
 
-		holdefiContract.updatePromotion(market);
+		holdefiContract.beforeChangeSupplyRate(market);
 		holdefiContract.reserveSettlement(market);
 
 		emit PromotionRateChanged(market, newPromotionRate, marketAssets[market].promotionRate);
@@ -254,8 +254,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		uint256 totalBorrow = holdefiContract.marketAssets(market).totalBorrow;
 		require (totalBorrow == 0, "Total borrow is not zero");
 		
-		holdefiContract.updateBorrowIndex(market);
-		holdefiContract.updatePromotion(market);
+		holdefiContract.beforeChangeBorrowRate(market);
 
 		for (uint256 i = 0; i < marketsList.length ; i++) {
 			if (marketsList[i] == market){
@@ -312,8 +311,7 @@ contract HoldefiSettings is HoldefiOwnable {
 				require (newBorrowRate <= maxIncrease, "Rate should be increased less than max allowed");
 			}
 
-			holdefiContract.updateBorrowIndex(market);
-			holdefiContract.updatePromotion(market);
+			holdefiContract.beforeChangeBorrowRate(market);
 		}
 
 		emit BorrowRateChanged(market, newBorrowRate, marketAssets[market].borrowRate);
@@ -340,7 +338,7 @@ contract HoldefiSettings is HoldefiOwnable {
 					"Rate should be decreased less than max allowed"
 				);
 			}
-			holdefiContract.updatePromotion(market);
+			holdefiContract.beforeChangeSupplyRate(market);
 		}
 
 		emit SuppliersShareRateChanged(

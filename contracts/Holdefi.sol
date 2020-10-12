@@ -208,7 +208,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		supplies[msg.sender][market].balance = balance.add(amount);
 		supplies[msg.sender][market].lastInterestIndex = currentSupplyIndex;
 
-		updatePromotion(market);
+		beforeChangeSupplyRate(market);
 		
 		marketAssets[market].totalSupply = marketAssets[market].totalSupply.add(amount);
 
@@ -248,7 +248,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		}
 		supplies[msg.sender][market].lastInterestIndex = currentSupplyIndex;
 
-		updatePromotion(market);
+		beforeChangeSupplyRate(market);
 		
 		marketAssets[market].totalSupply = marketAssets[market].totalSupply.sub(remaining);	
 
@@ -324,8 +324,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		borrows[msg.sender][collateral][market].lastInterestIndex = currentBorrowIndex;
 		collaterals[msg.sender][collateral].lastUpdateTime = block.timestamp;
 
-		updateSupplyIndex(market);
-		updatePromotionReserve(market);
+		beforeChangeSupplyRate(market);
 
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.add(amount);
 
@@ -349,8 +348,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		borrows[msg.sender][collateral][market].lastInterestIndex = currentBorrowIndex;
 		collaterals[msg.sender][collateral].lastUpdateTime = block.timestamp;
 
-		updateSupplyIndex(market);
-		updatePromotionReserve(market);
+		beforeChangeSupplyRate(market);
 		
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(remaining);	
 
@@ -425,8 +423,7 @@ contract Holdefi is HoldefiPausableOwnable {
 			collateralAssets[collateral].totalLiquidatedCollateral.add(liquidatedCollateral);
 
 		delete borrows[borrower][collateral][market];
-		updateSupplyIndex(market);
-		updatePromotionReserve(market);	
+		beforeChangeSupplyRate(market);
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(borrowBalance);
 		marketDebt[collateral][market] = marketDebt[collateral][market].add(totalBorrowedBalance);
 
@@ -477,28 +474,50 @@ contract Holdefi is HoldefiPausableOwnable {
 		collateralAmountWithDiscount = holdefiPrices.getAssetAmountFromValue(collateral, collateralValue);
 	}
 	
-	// Returns supply and borrow index for a given `market` at current time 
-	function getCurrentInterestIndex (address market) public view returns(uint256 supplyIndex, uint256 supplyRate, uint256 borrowIndex, uint256 borrowRate, uint256 currentTime) {
-		uint256 supplyRateBase;
-		uint256 promotionRate;
-		(borrowRate,supplyRateBase,promotionRate) = holdefiSettings.getInterests(market);
+
+	function getCurrentSupplyIndex (address market)
+		public
+		view
+		returns (
+			uint256 supplyIndex,
+			uint256 supplyRate,
+			uint256 currentTime
+		)
+	{
+		(, uint256 supplyRateBase, uint256 promotionRate) = holdefiSettings.getInterests(market);
 		
 		currentTime = block.timestamp;
-		supplyRate = supplyRateBase.add(promotionRate);
-
 		uint256 deltaTimeSupply = currentTime.sub(marketAssets[market].supplyIndexUpdateTime);
-		uint256 deltaTimeBorrow = currentTime.sub(marketAssets[market].borrowIndexUpdateTime);
 
+		supplyRate = supplyRateBase.add(promotionRate);
 		uint256 deltaTimeInterest = deltaTimeSupply.mul(supplyRate);
 		supplyIndex = marketAssets[market].supplyIndex.add(deltaTimeInterest);
+	}
 
-		deltaTimeInterest = deltaTimeBorrow.mul(borrowRate);
+	function getCurrentBorrowIndex (address market)
+		public
+		view
+		returns (
+			uint256 borrowIndex,
+			uint256 borrowRate,
+			uint256 currentTime
+		)
+	{
+		borrowRate = holdefiSettings.marketAssets(market).borrowRate;
+		
+		currentTime = block.timestamp;
+		uint256 deltaTimeBorrow = currentTime.sub(marketAssets[market].borrowIndexUpdateTime);
+
+		uint256 deltaTimeInterest = deltaTimeBorrow.mul(borrowRate);
 		borrowIndex = marketAssets[market].borrowIndex.add(deltaTimeInterest);
 	}
 
-	function getCurrentPromotion (address market) public view returns(uint256 promotionReserveScaled, uint256 promotionDebtScaled, uint256 currentTime) {
-		(uint256 borrowRate, uint256 supplyRateBase, uint256 promotionRate) = holdefiSettings.getInterests(market);
-		
+	function getPromotionReserve (address market)
+		public
+		view
+		returns (uint256 promotionReserveScaled, uint256 currentTime)
+	{
+		(uint256 borrowRate, uint256 supplyRateBase,) = holdefiSettings.getInterests(market);
 		currentTime = block.timestamp;
 	
 		uint256 allSupplyInterest = marketAssets[market].totalSupply.mul(supplyRateBase);
@@ -508,21 +527,30 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 currentInterest = allBorrowInterest.sub(allSupplyInterest);
 		uint256 deltaTimeInterest = currentInterest.mul(deltaTime);
 		promotionReserveScaled = marketAssets[market].promotionReserveScaled.add(deltaTimeInterest);
+	}
 
-		if (promotionRate != 0){
-			deltaTime = currentTime.sub(marketAssets[market].promotionDebtLastUpdateTime);
-			currentInterest = marketAssets[market].totalSupply.mul(promotionRate);
-			deltaTimeInterest = currentInterest.mul(deltaTime);
-			promotionDebtScaled = marketAssets[market].promotionDebtScaled.add(deltaTimeInterest);
-		}
-		else {
-			promotionDebtScaled = marketAssets[market].promotionDebtScaled;
+	function getPromotionDebt (address market)
+		public
+		view
+		returns (uint256 promotionDebtScaled, uint256 currentTime)
+	{
+		uint256 promotionRate = holdefiSettings.marketAssets(market).promotionRate;
+
+		currentTime = block.timestamp;
+		promotionDebtScaled = marketAssets[market].promotionDebtScaled;
+
+		if (promotionRate != 0) {
+			uint256 deltaTime = block.timestamp.sub(marketAssets[market].promotionDebtLastUpdateTime);
+			uint256 currentInterest = marketAssets[market].totalSupply.mul(promotionRate);
+			uint256 deltaTimeInterest = currentInterest.mul(deltaTime);
+			promotionDebtScaled = promotionDebtScaled.add(deltaTimeInterest);
 		}
 	}
 
 	// Update a `market` supply interest index and promotion reserve
 	function updateSupplyIndex (address market) public {
-		(uint256 currentSupplyIndex,uint256 supplyRate,,,uint256 currentTime) = getCurrentInterestIndex(market);
+		(uint256 currentSupplyIndex, uint256 supplyRate, uint256 currentTime) =
+			getCurrentSupplyIndex(market);
 
 		marketAssets[market].supplyIndex = currentSupplyIndex;
 		marketAssets[market].supplyIndexUpdateTime = currentTime;
@@ -532,7 +560,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Update a `market` borrow interest index 
 	function updateBorrowIndex (address market) public {
-		(,,uint256 currentBorrowIndex,,uint256 currentTime) = getCurrentInterestIndex(market);
+		(uint256 currentBorrowIndex,, uint256 currentTime) = getCurrentBorrowIndex(market);
 
 		marketAssets[market].borrowIndex = currentBorrowIndex;
 		marketAssets[market].borrowIndexUpdateTime = currentTime;
@@ -541,35 +569,43 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	function updatePromotionReserve(address market) public {
-		(uint256 reserveScaled,,uint256 currentTime) = getCurrentPromotion(market);
+		(uint256 reserveScaled,) = getPromotionReserve(market);
 
 		marketAssets[market].promotionReserveScaled = reserveScaled;
-		marketAssets[market].promotionReserveLastUpdateTime = currentTime;
+		marketAssets[market].promotionReserveLastUpdateTime = block.timestamp;
 
 		emit PromotionReserveUpdated(market, reserveScaled);
 	}
 
-	// Subtract users promotion from promotionReserve for a `market` and update promotionDebt and promotionRate if needed
-	function updatePromotion(address market) public {
+	function updatePromotionDebt(address market) internal {
+    	(uint256 debtScaled,) = getPromotionDebt(market);
+    	if (marketAssets[market].promotionDebtScaled != debtScaled){
+      		marketAssets[market].promotionDebtScaled = debtScaled;
+      		marketAssets[market].promotionDebtLastUpdateTime = block.timestamp;
+
+      		emit PromotionDebtUpdated(market, debtScaled);
+    	}
+    	if (marketAssets[market].promotionReserveScaled <= marketAssets[market].promotionDebtScaled) {
+      		holdefiSettings.resetPromotionRate(market);
+    	}
+  	}
+
+  	function beforeChangeSupplyRate (address market) public {
 		updateSupplyIndex(market);
 		updatePromotionReserve(market);
-		(uint256 reserveScaled,uint256 debtScaled,uint256 currentTime) = getCurrentPromotion(market);
-		if (holdefiSettings.marketAssets(market).promotionRate != 0){
-			marketAssets[market].promotionDebtScaled = debtScaled;
-			marketAssets[market].promotionDebtLastUpdateTime = currentTime;
+		updatePromotionDebt(market);
+	}
 
-			if (debtScaled > reserveScaled) {
-				holdefiSettings.resetPromotionRate(market);
-			}
-			emit PromotionDebtUpdated(market, debtScaled);
-		}
+	function beforeChangeBorrowRate (address market) external {
+		updateBorrowIndex(market);
+		beforeChangeSupplyRate(market);
 	}
 
 	// Returns balance and interest of an `account` for a given `market`
 	function getAccountSupply(address account, address market) public view returns(uint256 balance, uint256 interest, uint256 currentSupplyIndex) {
 		balance = supplies[account][market].balance;
 
-		(currentSupplyIndex,,,,) = getCurrentInterestIndex(market);
+		(currentSupplyIndex,,) = getCurrentSupplyIndex(market);
 
 		uint256 deltaInterestIndex = currentSupplyIndex.sub(supplies[account][market].lastInterestIndex);
 		uint256 deltaInterestScaled = deltaInterestIndex.mul(balance);
@@ -582,7 +618,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	function getAccountBorrow(address account, address market, address collateral) public view returns(uint256 balance, uint256 interest, uint256 currentBorrowIndex) {
 		balance = borrows[account][collateral][market].balance;
 
-		(,,currentBorrowIndex,,) = getCurrentInterestIndex(market);
+		(currentBorrowIndex,,) = getCurrentBorrowIndex(market);
 
 		uint256 deltaInterestIndex = currentBorrowIndex.sub(borrows[account][collateral][market].lastInterestIndex);
 		uint256 deltaInterestScaled = deltaInterestIndex.mul(balance);
@@ -686,29 +722,15 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	function depositPromotionReserveInternal (address market, uint256 amount) internal {
-		(uint256 reserveScaled,uint256 debtScaled,uint256 currentTime) = getCurrentPromotion(market);
-
+		if (market != ethAddress) {
+			transferToHoldefi(address(this), market, amount);
+		}
 		uint256 amountScaled = amount.mul(secondsPerYear).mul(rateDecimals);
 
-		uint256 totalReserve = reserveScaled.add(amountScaled);
+		marketAssets[market].promotionReserveScaled = marketAssets[market].promotionReserveScaled.add(
+			amountScaled
+		);
 
-		if (totalReserve <= debtScaled) {
-			marketAssets[market].promotionReserveScaled = 0;
-			marketAssets[market].promotionDebtScaled = debtScaled.sub(totalReserve);	
-			if (holdefiSettings.marketAssets(market).promotionRate != 0) {
-				updateSupplyIndex(market);
-				holdefiSettings.resetPromotionRate(market);
-			}
-		}
-		else {
-			marketAssets[market].promotionReserveScaled = totalReserve.sub(debtScaled);
-			marketAssets[market].promotionDebtScaled = 0;
-		}
-		marketAssets[market].promotionReserveLastUpdateTime = currentTime;
-		marketAssets[market].promotionDebtLastUpdateTime = currentTime;
-
-		emit PromotionDebtUpdated(market, marketAssets[market].promotionDebtScaled);
-		emit PromotionReserveUpdated(market, marketAssets[market].promotionReserveScaled);
 		emit PromotionReserveDeposited(market, amount);
 	}
 
@@ -725,25 +747,17 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Withdraw promotion reserve by owner
 	function withdrawPromotionReserve (address market, uint256 amount) external onlyOwner {
-		(uint256 reserveScaled,uint256 debtScaled,uint256 currentTime) = getCurrentPromotion(market);
+	    (uint256 reserveScaled,) = getPromotionReserve(market);
+	    (uint256 debtScaled,) = getPromotionDebt(market);
 
-		require (reserveScaled > debtScaled, 'Promotion reserve should be more than promotion debt');
-		
-		uint256 maxWithdrawScaled = reserveScaled.sub(debtScaled);
+	    uint256 amountScaled = amount.mul(secondsPerYear).mul(rateDecimals);
+	    uint256 increasedDebtScaled = amountScaled.add(debtScaled);
+	    require (reserveScaled > increasedDebtScaled, "Amount should be less than max");
 
-		uint256 amountScaled = amount.mul(secondsPerYear).mul(rateDecimals);
-
-	    require (amountScaled < maxWithdrawScaled, 'Amount should be less than max');
-
-	    marketAssets[market].promotionReserveScaled = maxWithdrawScaled.sub(amountScaled);
-	    marketAssets[market].promotionReserveLastUpdateTime = currentTime;
-		marketAssets[market].promotionDebtScaled = 0;
-		marketAssets[market].promotionDebtLastUpdateTime = currentTime;	
+	    marketAssets[market].promotionReserveScaled = reserveScaled.sub(amountScaled);
 
 	    transferFromHoldefi(msg.sender, market, amount);
 
-	    emit PromotionDebtUpdated(market, marketAssets[market].promotionDebtScaled);
-		emit PromotionReserveUpdated(market, marketAssets[market].promotionReserveScaled);
 	    emit PromotionReserveWithdrawn(market, amount);
 	}
 
