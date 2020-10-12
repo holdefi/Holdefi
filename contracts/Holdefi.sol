@@ -139,45 +139,74 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// ----------- Events -----------
 
-	event Supply(address sender, address supplier, address market, uint256 amount, uint16 referralCode);
+	event Supply(
+		address sender,
+		address indexed supplier,
+		address indexed market,
+		uint256 amount,
+		uint16 referralCode
+	);
 
-	event WithdrawSupply(address sender, address supplier, address market, uint256 amount);
+	event WithdrawSupply(address sender, address indexed supplier, address indexed market, uint256 amount);
 
-	event Collateralize(address sender, address collateralizer, address collateral, uint256 amount);
+	event Collateralize(
+		address sender,
+		address indexed collateralizer,
+		address indexed collateral,
+		uint256 amount
+	);
 
-	event WithdrawCollateral(address sender, address collateralizer, address collateral, uint256 amount);
+	event WithdrawCollateral(
+		address sender,
+		address indexed collateralizer,
+		address indexed collateral,
+		uint256 amount
+	);
 
-	event Borrow(address sender, address borrower, address market, address collateral, uint256 amount, uint16 referralCode);
+	event Borrow(
+		address sender,
+		address indexed borrower,
+		address indexed market,
+		address indexed collateral,
+		uint256 amount,
+		uint16 referralCode
+	);
 
-	event RepayBorrow(address sender, address borrower, address market, address collateral, uint256 amount);
+	event RepayBorrow(
+		address sender,
+		address indexed borrower,
+		address indexed market,
+		address indexed collateral,
+		uint256 amount
+	);
 
-	event UpdateSupplyIndex(address market, uint256 newSupplyIndex, uint256 supplyRate);
+	event UpdateSupplyIndex(address indexed market, uint256 newSupplyIndex, uint256 supplyRate);
 
-	event UpdateBorrowIndex(address market, uint256 newBorrowIndex);
+	event UpdateBorrowIndex(address indexed market, uint256 newBorrowIndex);
 
 	event CollateralLiquidated(
-		address borrower,
-		address market,
-		address collateral,
+		address indexed borrower,
+		address indexed market,
+		address indexed collateral,
 		uint256 marketDebt,
 		uint256 liquidatedCollateral
 	);
 
-	event BuyLiquidatedCollateral(address market, address collateral, uint256 marketAmount);
+	event BuyLiquidatedCollateral(address indexed market, address indexed collateral, uint256 marketAmount);
 
 	event HoldefiPricesContractChanged(address newAddress, address oldAddress);
 
-	event LiquidationReserveWithdrawn(address collateral, uint256 amount);
+	event LiquidationReserveWithdrawn(address indexed collateral, uint256 amount);
 
-	event LiquidationReserveDeposited(address collateral, uint256 amount);
+	event LiquidationReserveDeposited(address indexed collateral, uint256 amount);
 
-	event PromotionReserveWithdrawn(address market, uint256 amount);
+	event PromotionReserveWithdrawn(address indexed market, uint256 amount);
 
-	event PromotionReserveDeposited(address market, uint256 amount);
+	event PromotionReserveDeposited(address indexed market, uint256 amount);
 
-	event PromotionReserveUpdated(address market, uint256 promotionReserve);
+	event PromotionReserveUpdated(address indexed market, uint256 promotionReserve);
 
-	event PromotionDebtUpdated(address market, uint256 promotionDebt);
+	event PromotionDebtUpdated(address indexed market, uint256 promotionDebt);
 
 	constructor(
 		HoldefiSettingsInterface holdefiSettingsAddress,

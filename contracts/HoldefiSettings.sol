@@ -95,26 +95,25 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	HoldefiInterface public holdefiContract;
 
-	event MarketActivationChanged(address market, bool status);
+	event MarketActivationChanged(address indexed market, bool status);
 
-	event CollateralActivationChanged(address collateral, bool status);
+	event CollateralActivationChanged(address indexed collateral, bool status);
 
-	event MarketExistenceChanged(address market, bool status);
+	event MarketExistenceChanged(address indexed market, bool status);
 
-	event CollateralExistenceChanged(address collateral, bool status);
+	event CollateralExistenceChanged(address indexed collateral, bool status);
 
-	event BorrowRateChanged(address market, uint256 newRate, uint256 oldRate);
+	event BorrowRateChanged(address indexed market, uint256 newRate, uint256 oldRate);
 
-	event SuppliersShareRateChanged(address  market, uint256 newRate, uint256 oldRate);
+	event SuppliersShareRateChanged(address indexed market, uint256 newRate, uint256 oldRate);
 
-	event PromotionRateChanged(address market, uint256 newRate, uint256 oldRate);
+	event PromotionRateChanged(address indexed market, uint256 newRate, uint256 oldRate);
 
-	event ValueToLoanRateChanged(address collateral, uint256 newRate, uint256 oldRate);
+	event ValueToLoanRateChanged(address indexed collateral, uint256 newRate, uint256 oldRate);
 
-	event PenaltyRateChanged(address collateral, uint256 newRate, uint256 oldRate);
+	event PenaltyRateChanged(address indexed collateral, uint256 newRate, uint256 oldRate);
 
-	event BonusRateChanged(address collateral, uint256 newRate, uint256 oldRate);
-
+	event BonusRateChanged(address indexed collateral, uint256 newRate, uint256 oldRate);
 
 
     modifier marketIsExist(address market) {
