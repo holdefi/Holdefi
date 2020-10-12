@@ -17,6 +17,12 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     address public pauser;
 
     mapping(string => Operation) public paused;
+
+    event PauserChanged(address newPauser, address oldPauser);
+
+    event OperationPaused(string operation, uint256 pauseDuration);
+
+    event OperationUnpaused(string operation);
      
     // Define valid operations that can be paused
     constructor () public {
@@ -67,6 +73,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     {
         require (pauseDuration <= maxPauseDuration, "Duration not in range");
         paused[operation].pauseEndTime = block.timestamp + pauseDuration;
+        emit OperationPaused(operation, pauseDuration);
     }
 
     function unpause(string memory operation)
@@ -76,6 +83,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
         whenPaused(operation)
     {
         paused[operation].pauseEndTime = 0;
+        emit OperationUnpaused(operation);
     }
 
     function batchPause(string[] memory operations, uint256[] memory pauseDurations) external {
@@ -92,6 +100,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     }
 
     function setPauser(address newPauser) external onlyOwner {
+        emit PauserChanged(newPauser, pauser);
         pauser = newPauser;
     }
 }

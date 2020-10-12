@@ -130,9 +130,6 @@ contract Holdefi is HoldefiPausableOwnable {
 	// Wallet Contract for Collaterals 
 	HoldefiCollaterals public holdefiCollaterals;
 
-	// Price contract can be unchangeable
-	bool public fixPrices = false;
-
 	// ----------- Events -----------
 
 	event Supply(address supplier, address market, uint256 amount);
@@ -159,8 +156,18 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	event PromotionRateChanged(address market, uint256 newRate);
 
-	event HoldefiPricesContractChanged(HoldefiPricesInterface newAddress, HoldefiPricesInterface oldAddress);
-	
+	event HoldefiPricesContractChanged(address newAddress, address oldAddress);
+
+	event LiquidationReserveWithdrawn(address collateral, uint256 amount);
+
+	event PromotionReserveWithdrawn(address market, uint256 amount);
+
+	event PromotionReserveDeposited(address market, uint256 amount);
+
+	event PromotionReserveUpdated(address market, uint256 promotionReserve);
+
+	event PromotionDebtUpdated(address market, uint256 promotionDebt);
+
 	constructor(
 		HoldefiSettingsInterface holdefiSettingsAddress,
 		HoldefiPricesInterface holdefiPricesAddress
@@ -557,6 +564,8 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		marketAssets[market].promotionReserveScaled = reserveScaled;
 		marketAssets[market].promotionReserveLastUpdateTime = currentTime;
+
+		emit PromotionReserveUpdated(market, reserveScaled);
 	}
 
 	// Subtract users promotion from promotionReserve for a `market` and update promotionDebt and promotionRate if needed
@@ -572,6 +581,7 @@ contract Holdefi is HoldefiPausableOwnable {
 				marketAssets[market].promotionRate = 0;
 				emit PromotionRateChanged(market, 0);
 			}
+			emit PromotionDebtUpdated(market, debtScaled);
 		}
 	}
 
@@ -687,6 +697,8 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		collateralAssets[collateral].totalLiquidatedCollateral = collateralAssets[collateral].totalLiquidatedCollateral.sub(transferAmount);
 		holdefiCollaterals.withdraw(collateral, msg.sender, transferAmount);
+
+		emit LiquidationReserveWithdrawn(collateral, amount);
 	}
 
 	function depositPromotionReserveInternal (address market, uint256 amount) internal {
@@ -711,6 +723,10 @@ contract Holdefi is HoldefiPausableOwnable {
 		}
 		marketAssets[market].promotionReserveLastUpdateTime = currentTime;
 		marketAssets[market].promotionDebtLastUpdateTime = currentTime;
+
+		emit PromotionDebtUpdated(market, marketAssets[market].promotionDebtScaled);
+		emit PromotionReserveUpdated(market, marketAssets[market].promotionReserveScaled);
+		emit PromotionReserveDeposited(market, amount);
 	}
 
 	// Deposit ERC20 asset as promotion reserve 
@@ -742,6 +758,10 @@ contract Holdefi is HoldefiPausableOwnable {
 		marketAssets[market].promotionDebtLastUpdateTime = currentTime;	
 
 	    transferFromHoldefi(msg.sender, market, amount);
+
+	    emit PromotionDebtUpdated(market, marketAssets[market].promotionDebtScaled);
+		emit PromotionReserveUpdated(market, marketAssets[market].promotionReserveScaled);
+	    emit PromotionReserveWithdrawn(market, amount);
 	}
 
 	// Set promotion rate by owner
@@ -764,19 +784,9 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// Set HoldefiPirce contract 
 	function setHoldefiPricesContract (HoldefiPricesInterface newHoldefiPrices) external onlyOwner {
-		require (!fixPrices, 'HoldefiPrices is fixed');
-		
-		HoldefiPricesInterface oldHoldefiPrices = holdefiPrices;
+		emit HoldefiPricesContractChanged(address(newHoldefiPrices), address(holdefiPrices));
 		holdefiPrices = newHoldefiPrices;
-
-		emit HoldefiPricesContractChanged(newHoldefiPrices, oldHoldefiPrices);
 	}
-
-	// Fix HoldefiPrice contract 
-	function fixHoldefiPricesContract () external onlyOwner {
-		fixPrices = true;
-	}
-
 
 	function transferFromHoldefi(address receiver, address asset, uint256 amount) internal {
 		bool success = false;
