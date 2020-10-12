@@ -23,7 +23,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     event OperationPaused(string operation, uint256 pauseDuration);
 
     event OperationUnpaused(string operation);
-     
+    
     // Define valid operations that can be paused
     constructor () public {
         paused["supply"].isValid = true;

@@ -199,7 +199,11 @@ contract HoldefiSettings is HoldefiOwnable {
 		marketAssets[market].promotionRate = 0;
 	}
 
-	function setBorrowRate (address market, uint256 newBorrowRate) external onlyOwner marketIsExist(market) {
+	function setBorrowRate (address market, uint256 newBorrowRate)
+		external 
+		onlyOwner
+		marketIsExist(market)
+	{
 		setBorrowRateInternal(market, newBorrowRate);
 	}
 
@@ -235,7 +239,10 @@ contract HoldefiSettings is HoldefiOwnable {
 		setBonusRateInternal(collateral, newBonusRate); 
 	}
 
-	function addMarket (address market, uint256 borrowRate, uint256 suppliersShareRate) external onlyOwner {
+	function addMarket (address market, uint256 borrowRate, uint256 suppliersShareRate)
+		external
+		onlyOwner
+	{
 		require (!marketAssets[market].isExist, "The market is exist");
 		require (marketsList.length < maxListsLenght, "Market list is full");
 		
