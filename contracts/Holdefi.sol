@@ -836,6 +836,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	function depositPromotionReserveInternal (address market, uint256 amount)
 		internal
+		marketIsActive(market)
 	{
 		if (market != ethAddress) {
 			transferToHoldefi(address(this), market, amount);
