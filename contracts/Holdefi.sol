@@ -137,7 +137,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	// ----------- Events -----------
 
-	event Supply(address supplier, address market, uint256 amount);
+	event Supply(address supplier, address market, uint256 amount, uint16 referralCode);
 
 	event WithdrawSupply(address supplier, address market, uint256 amount);
 
@@ -145,7 +145,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	event WithdrawCollateral(address collateralizer, address collateral, uint256 amount);
 
-	event Borrow(address borrower, address market, address collateral, uint256 amount);
+	event Borrow(address borrower, address market, address collateral, uint256 amount, uint16 referralCode);
 
 	event RepayBorrow(address borrower, address market, address collateral, uint256 amount);
 
@@ -166,6 +166,8 @@ contract Holdefi is HoldefiPausableOwnable {
 	event HoldefiPricesContractChanged(address newAddress, address oldAddress);
 
 	event LiquidationReserveWithdrawn(address collateral, uint256 amount);
+
+	event LiquidationReserveDeposited(address collateral, uint256 amount);
 
 	event PromotionReserveWithdrawn(address market, uint256 amount);
 
@@ -202,13 +204,13 @@ contract Holdefi is HoldefiPausableOwnable {
     }
 
 	// Deposit ERC20 assets for supplying (except ETH).
-	function supply (address market, uint256 amount) external isNotETHAddress(market) {
-		supplyInternal(market, amount);
+	function supply (address market, uint256 amount, uint16 referralCode) external isNotETHAddress(market) {
+		supplyInternal(market, amount, referralCode);
 	}
 
 	// Deposit ETH for supplying
-	function supply () payable external whenNotPaused("supply") {	
-		supplyInternal(ethAddress, msg.value);
+	function supply (uint16 referralCode) payable external whenNotPaused("supply") {	
+		supplyInternal(ethAddress, msg.value, referralCode);
 	}
 
 	// Withdraw ERC20 assets from a market (include interests).
@@ -232,8 +234,8 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	// Borrow a `market` asset based on a `collateral` power 
-	function borrow (address market, address collateral, uint256 amount) external {
-		borrowInternal(market, collateral, amount);
+	function borrow (address market, address collateral, uint256 amount, uint16 referralCode) external {
+		borrowInternal(market, collateral, amount, referralCode);
 	}
 
 	// Repay borrow a `market` token based on a `collateral` power
@@ -289,7 +291,6 @@ contract Holdefi is HoldefiPausableOwnable {
 		emit CollateralLiquidated(borrower, market, collateral, totalBorrowedBalance, liquidatedCollateral);	
 	}
 
-	// Buy `collateral` in exchange for `market` token
 	function buyLiquidatedCollateral (address market, address collateral, uint256 marketAmount)
 		external
 		isNotETHAddress(market)
@@ -542,6 +543,27 @@ contract Holdefi is HoldefiPausableOwnable {
 		}
 	}
 
+	function depositLiquidationReserve(address collateral, uint256 amount)
+		external
+		isNotETHAddress(collateral)
+	{
+		transferToHoldefi(address(holdefiCollaterals), collateral, amount);
+		
+		collateralAssets[collateral].totalLiquidatedCollateral =
+			collateralAssets[collateral].totalLiquidatedCollateral.add(amount);
+
+		emit LiquidationReserveDeposited(collateral, amount);
+	}
+
+	function depositLiquidationReserve() external payable {
+		transferFromHoldefi(address(holdefiCollaterals), ethAddress, msg.value);
+
+		collateralAssets[ethAddress].totalLiquidatedCollateral =
+			collateralAssets[ethAddress].totalLiquidatedCollateral.add(msg.value);
+		
+		emit LiquidationReserveDeposited(ethAddress, msg.value);
+	}
+
 	// Withdraw liquidation reserve by owner
 	function withdrawLiquidationReserve (address collateral, uint256 amount) external onlyOwner {
 		uint256 maxWithdraw = getLiquidationReserve(collateral);
@@ -621,7 +643,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		require (success, "Cannot Transfer");
 	}
 
-	function supplyInternal(address market, uint256 amount)
+	function supplyInternal(address market, uint256 amount, uint16 referralCode)
 		internal
 		whenNotPaused("supply")
 		marketIsActive(market)
@@ -640,7 +662,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		
 		marketAssets[market].totalSupply = marketAssets[market].totalSupply.add(amount);
 
-		emit Supply(msg.sender, market, amount);
+		emit Supply(msg.sender, market, amount, referralCode);
 	}
 
 	function withdrawSupplyInternal (address market, uint256 amount) 
@@ -729,7 +751,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		emit WithdrawCollateral(msg.sender, collateral, transferAmount);
 	}
 
-	function borrowInternal (address market, address collateral, uint256 amount)
+	function borrowInternal (address market, address collateral, uint256 amount, uint16 referralCode)
 		internal
 		whenNotPaused("borrow")
 		marketIsActive(market)
@@ -761,7 +783,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		transferFromHoldefi(msg.sender, market, amount);
 
-		emit Borrow(msg.sender, market, collateral, amount);
+		emit Borrow(msg.sender, market, collateral, amount, referralCode);
 	}
 
 	function repayBorrowInternal (address market, address collateral, uint256 amount)
