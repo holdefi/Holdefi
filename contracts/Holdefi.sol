@@ -17,7 +17,8 @@ interface HoldefiPricesInterface {
 interface HoldefiSettingsInterface {
 
 	struct MarketSettings {
-		bool isActive;      
+		bool isExist;		// Market is exist or not
+		bool isActive;		// Market is open for deposit or not
 
 		uint256 borrowRate;
 		uint256 borrowRateUpdateTime;
@@ -27,9 +28,10 @@ interface HoldefiSettingsInterface {
 	}
 
 	struct CollateralSettings {
-		bool isActive;    
+		bool isExist;		// Collateral is exist or not
+		bool isActive;		// Collateral is open for deposit or not
 
-		uint256 valueToLoanRate; 
+		uint256 valueToLoanRate;
 		uint256 VTLUpdateTime;
 
 		uint256 penaltyRate;
