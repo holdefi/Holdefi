@@ -1,7 +1,6 @@
 const Holdefi = artifacts.require("Holdefi");
 const HoldefiSettings = artifacts.require("HoldefiSettings");
 const HoldefiPrices = artifacts.require("HoldefiPrices");
-const Wallet = artifacts.require("CollateralsWallet");
 
 module.exports = function(deployer) {
 	deployer.deploy(HoldefiPrices).then(function(){
