@@ -686,21 +686,11 @@ contract Holdefi is HoldefiPausableOwnable {
 		external
 		isNotETHAddress(collateral)
 	{
-		transferToHoldefi(address(holdefiCollaterals), collateral, amount);
-		
-		collateralAssets[collateral].totalLiquidatedCollateral =
-			collateralAssets[collateral].totalLiquidatedCollateral.add(amount);
-
-		emit LiquidationReserveDeposited(collateral, amount);
+		depositLiquidationReserveInternal(collateral, amount);
 	}
 
 	function depositLiquidationReserve() external payable {
-		transferFromHoldefi(address(holdefiCollaterals), ethAddress, msg.value);
-
-		collateralAssets[ethAddress].totalLiquidatedCollateral =
-			collateralAssets[ethAddress].totalLiquidatedCollateral.add(msg.value);
-		
-		emit LiquidationReserveDeposited(ethAddress, msg.value);
+		depositLiquidationReserveInternal(ethAddress, msg.value);
 	}
 
 	function withdrawLiquidationReserve (address collateral, uint256 amount) external onlyOwner {
@@ -1060,5 +1050,21 @@ contract Holdefi is HoldefiPausableOwnable {
 			marketAssets[market].promotionReserveScaled.add(amountScaled);
 
 		emit PromotionReserveDeposited(market, amount);
+	}
+
+	function depositLiquidationReserveInternal (address collateral, uint256 amount)
+		internal
+		collateralIsActive(ethAddress)
+	{
+		if (collateral != ethAddress) {
+			transferToHoldefi(address(holdefiCollaterals), collateral, amount);
+		}
+		else {
+			transferFromHoldefi(address(holdefiCollaterals), collateral, amount);
+		}
+		collateralAssets[ethAddress].totalLiquidatedCollateral =
+			collateralAssets[ethAddress].totalLiquidatedCollateral.add(msg.value);
+		
+		emit LiquidationReserveDeposited(ethAddress, msg.value);
 	}
 }
