@@ -4,6 +4,9 @@ const {
     time,
     expectRevert,
     bigNumber,
+
+    ethAddress,
+    referalCode,
     decimal18,
     ratesDecimal,
     secondsPerYear,
@@ -11,25 +14,23 @@ const {
 
     HoldefiContract,
     HoldefiSettingsContract,
-    MedianizerContract,
     HoldefiPricesContract,
+    HoldefiCollateralsContract,
     SampleTokenContract,
-    CollateralsWalletContract,  
+    AggregatorContract,
 
+    convertToDecimals,
     initializeContracts,
     assignToken,
-    addERC20Market,
-    addStableCoinMarket,
-    addETHMarket,
-    addERC20Collateral,
     scenario
 } = require ("./Utils.js");
 
-contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4,user5,user6]){
+contract('HoldefiSettings', function([owner, user1, user2, user3, user4, user5, user6]){
     
     describe("Set Holdefi Contract", async() =>{
         beforeEach(async () => {
-            await initializeContracts(owner,ownerChanger);
+            await initializeContracts(owner);
+
         });
 
         it('Initialize works as expected', async () => {
@@ -40,8 +41,16 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
             assert.equal(Holdefi.address, interestRates_holdefiContractAddress);
         });
 
+        it('Fail if set wrong contract address', async () => {
+            HoldefiSettings2 = await HoldefiSettingsContract.new({from: owner});
+            Holdefi2 = await HoldefiContract.new(HoldefiSettings2.address, HoldefiPrices.address, {from: owner});
+
+            await expectRevert(HoldefiSettings.setHoldefiContract(Holdefi2.address, {from: owner}),
+                "Conflict with Holdefi contract address");
+        });
+
         it('Fail if try to change holdefi contract address', async () => {
-            await expectRevert(HoldefiSettings.setHoldefiContract(SampleToken1.address, {from: owner}),
+            await expectRevert(HoldefiSettings.setHoldefiContract(Holdefi.address, {from: owner}),
                 "Should be set once");
         });
 
@@ -53,42 +62,32 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
     
     describe("Get interests (supplyRate and borrowRate)", async() =>{
         beforeEach(async () => {
-            await initializeContracts(owner,ownerChanger);
-            await HoldefiSettings.addMarket(SampleToken1.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8));
+            await scenario(owner,user1,user2,user3,user4);
             await time.increase(time.duration.days(10));
         });
 
-        it('Supply rate should be 0 if no supply', async () => {
-            await HoldefiSettings.setBorrowRate(SampleToken1.address, ratesDecimal.multipliedBy(0.15), {from: owner});
-
-            let interests = await HoldefiSettings.getInterests(SampleToken1.address, 0, 0, {from: owner});
-            assert.equal(interests.supplyRate.toString(), 0, "Supply rate set");
-        });
-
-        it('Supply rate should be 0 if no borrow', async () => {
-            await HoldefiSettings.setBorrowRate(SampleToken1.address, ratesDecimal.multipliedBy(0.15), {from: owner});
-
-            let interests = await HoldefiSettings.getInterests(SampleToken1.address, decimal18.multipliedBy(50), 0, {from: owner});
-            assert.equal(interests.supplyRate.toString(), 0, "Supply rate set");
+        it('Supply rate should be 0 if no supply and borrow', async () => {
+            await HoldefiSettings.addMarket(SampleToken2.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8));
+            
+            let interests = await HoldefiSettings.getInterests(SampleToken2.address, {from: owner});
+            assert.equal(interests.supplyRateBase.toString(), 0, "Supply rate set");
         });
 
         it('Supply rate should be calculated correctly if suppliersShareRate is 100%', async () => {
             await HoldefiSettings.setBorrowRate(SampleToken1.address, ratesDecimal.multipliedBy(0.15), {from: owner});
             await HoldefiSettings.setSuppliersShareRate(SampleToken1.address, ratesDecimal.multipliedBy(1), {from: owner});
-            let totalSupply = decimal18.multipliedBy(50);
-            let totalBorrow = decimal18.multipliedBy(20);
+            let getMarket = await Holdefi.marketAssets(SampleToken1.address);
 
-            let interests = await HoldefiSettings.getInterests(SampleToken1.address, totalSupply, totalBorrow, {from: owner});
-            let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
+            let interests = await HoldefiSettings.getInterests(SampleToken1.address, {from: owner});
 
-            let supplyRate = totalBorrow.multipliedBy(interests.borrowRate).dividedToIntegerBy(totalSupply);
-            assert.equal(interests.supplyRate.toString(), supplyRate.toString());
+            let supplyRate = bigNumber(getMarket.totalBorrow).multipliedBy(interests.borrowRate).dividedToIntegerBy(getMarket.totalSupply);
+            assert.equal(interests.supplyRateBase.toString(), supplyRate.toString());
         });
     });
 
     describe("Add market", async() =>{
         beforeEach(async () =>{
-            await initializeContracts(owner, ownerChanger);
+            await initializeContracts(owner);
         })
 
         it('Add market by owner',async () =>{
@@ -101,19 +100,19 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
 
         it('Fail if market added by other accounts',async () =>{
             await expectRevert(HoldefiSettings.addMarket(SampleToken1.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8),{from: user1}),
-                "Sender should be Owner");                  
+                "Sender should be owner");                  
         })
 
-        it('Fail if market exists',async () =>{
+        it('Fail if the market is exist',async () =>{
             await HoldefiSettings.addMarket(SampleToken1.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8));                  
             await expectRevert(HoldefiSettings.addMarket(SampleToken1.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8)),
-                "Market exists");                  
+                "The market is exist");                  
         })       
     })
 
     describe("Remove market", async() =>{
         beforeEach(async () =>{
-            await initializeContracts(owner, ownerChanger);
+            await initializeContracts(owner);
             await HoldefiSettings.addMarket(SampleToken1.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8));
         })
 
@@ -125,26 +124,41 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
 
         it('Fail if market removed by other accounts',async () =>{
             await expectRevert(HoldefiSettings.removeMarket(SampleToken1.address,{from: user1}),
-                "Sender should be Owner");                  
+                "Sender should be owner");                  
         })
+
+         it('Fail if a market removed (total borrow != 0)  ',async () =>{
+            await scenario(owner,user1,user2,user3,user4);
+            await expectRevert(HoldefiSettings.removeMarket(SampleToken1.address,{from: owner}),
+                "Total borrow is not zero");                  
+        })
+       
     })
 
     describe("Setting suppliersShareRate", async() =>{
         beforeEach(async () =>{
-            await scenario(owner,ownerChanger,user1,user2,user3,user4);
-            this.minSuppliersShareRate = await HoldefiSettings.minSuppliersShareRate.call();
-            this.suppliersShareRateMaxDecrease = await HoldefiSettings.suppliersShareRateMaxDecrease.call();
+            await scenario(owner, user1, user2, user3, user4);
+            minSuppliersShareRate = await HoldefiSettings.minSuppliersShareRate.call();
+            suppliersShareRateMaxDecrease = await HoldefiSettings.suppliersShareRateMaxDecrease.call();
             await time.increase(time.duration.days(10));
         })
         
         it('suppliersShareRate should be set if increased', async () => {
-            await HoldefiSettings.setSuppliersShareRate(SampleToken1.address, ratesDecimal.multipliedBy(1), {from: owner});
+            await HoldefiSettings.setSuppliersShareRate(
+                SampleToken1.address,
+                ratesDecimal.multipliedBy(1),
+                {from: owner}
+            );
             let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
             assert.equal(suppliersShareRate.toString(), ratesDecimal.multipliedBy(1).toString());
         });
 
         it('suppliersShareRate should be set if decreased less than maxDecrease', async () => {
-            await HoldefiSettings.setSuppliersShareRate(SampleToken1.address, ratesDecimal.multipliedBy(0.85), {from: owner});
+            await HoldefiSettings.setSuppliersShareRate(
+                SampleToken1.address,
+                ratesDecimal.multipliedBy(0.85),
+                {from: owner}
+            );
             let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
             assert.equal(suppliersShareRate.toString(), ratesDecimal.multipliedBy(0.85).toString());
         });
@@ -152,35 +166,42 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
         it('Supply interest should be changed after changing suppliersShareRate', async () => {
             let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
             await assignToken(owner, user5, SampleToken1);
-            await Holdefi.methods['supply(address,uint256)'](SampleToken1.address, decimal18.multipliedBy(20), {from:user5});
+            await Holdefi.methods['supply(address,uint256,uint16)'](
+                SampleToken1.address,
+                await convertToDecimals(SampleToken1, 20),
+                referalCode,
+                {from:user5}
+            );
             let time1 = await time.latest();
             let getMarketBefore = await Holdefi.marketAssets(SampleToken1.address);
 
             await time.increase(time.duration.days(40));
-            let getInterestsBefore = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
+            let getBorrowInterestsBefore = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterestsBefore = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
             await HoldefiSettings.setSuppliersShareRate(SampleToken1.address, bigNumber(suppliersShareRate).multipliedBy(1.05), {from: owner});
             let time2 = await time.latest();
-            let getInterestsAfter = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
+            let getBorrowInterestsAfter = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterestsAfter = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
 
             await time.increase(time.duration.days(40));
             let getAccountSupply = await Holdefi.getAccountSupply(user5,SampleToken1.address);
             let time3 = await time.latest();
-            await Holdefi.updatePromotionReserve(SampleToken1.address);
+            await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
             let time4 = await time.latest();
             let getMarketAfter = await Holdefi.marketAssets(SampleToken1.address);
 
 
-            let interestScaled1 = bigNumber(time2-time1).multipliedBy(getAccountSupply.balance).multipliedBy(getInterestsBefore.supplyRate);
-            let interestScaled2 = bigNumber(time3-time2).multipliedBy(getAccountSupply.balance).multipliedBy(getInterestsAfter.supplyRate);
+            let interestScaled1 = bigNumber(time2-time1).multipliedBy(getAccountSupply.balance).multipliedBy(getSupplyInterestsBefore.supplyRate);
+            let interestScaled2 = bigNumber(time3-time2).multipliedBy(getAccountSupply.balance).multipliedBy(getSupplyInterestsAfter.supplyRate);
             let totalInterest = interestScaled1.plus(interestScaled2).dividedToIntegerBy(secondsPerYear).dividedToIntegerBy(ratesDecimal);
 
-            let reserveInterestScaled1 = bigNumber(time2-time1).multipliedBy((bigNumber(getMarketBefore.totalBorrow).multipliedBy(getInterestsBefore.borrowRate)).minus(bigNumber(getMarketBefore.totalSupply).multipliedBy(getInterestsBefore.supplyRate)));
-            let reserveInterestScaled2 = bigNumber(time4-time2).multipliedBy((bigNumber(getMarketAfter.totalBorrow).multipliedBy(getInterestsAfter.borrowRate)).minus(bigNumber(getMarketAfter.totalSupply).multipliedBy(getInterestsAfter.supplyRate)));
+            let reserveInterestScaled1 = bigNumber(time2-time1).multipliedBy((bigNumber(getMarketBefore.totalBorrow).multipliedBy(getBorrowInterestsBefore.borrowRate)).minus(bigNumber(getMarketBefore.totalSupply).multipliedBy(getSupplyInterestsBefore.supplyRate)));
+            let reserveInterestScaled2 = bigNumber(time4-time2).multipliedBy((bigNumber(getMarketAfter.totalBorrow).multipliedBy(getBorrowInterestsAfter.borrowRate)).minus(bigNumber(getMarketAfter.totalSupply).multipliedBy(getSupplyInterestsAfter.supplyRate)));
             let totalReserveScaled = bigNumber(getMarketBefore.promotionReserveScaled).plus(reserveInterestScaled1).plus(reserveInterestScaled2)
 
-            let supplyRateAfter = bigNumber(getMarketBefore.totalBorrow).multipliedBy(getInterestsBefore.borrowRate).multipliedBy(suppliersShareRate).multipliedBy(1.05).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarketBefore.totalSupply);
+            let supplyRateAfter = bigNumber(getMarketBefore.totalBorrow).multipliedBy(getBorrowInterestsBefore.borrowRate).multipliedBy(suppliersShareRate).multipliedBy(1.05).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarketBefore.totalSupply);
 
-            assert.equal(getInterestsAfter.supplyRate.toString(), supplyRateAfter.toString(), 'Supply Rate increased');
+            assert.equal(getSupplyInterestsAfter.supplyRate.toString(), supplyRateAfter.toString(), 'Supply Rate increased');
             assert.equal(getAccountSupply.interest.toString(), totalInterest.toString(), 'Supply interest increased correctly');
             assert.equal(getMarketAfter.promotionReserveScaled.toString(),totalReserveScaled.toString(), 'Promotion Reserve increased correctly');
         });
@@ -188,7 +209,7 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
 
         it('Fail if called by other accounts',async () =>{
             await expectRevert(HoldefiSettings.setSuppliersShareRate(SampleToken1.address, ratesDecimal.multipliedBy(0.9), {from: user1}),
-                "Sender should be Owner");
+                "Sender should be owner");
         })
         
         it('Fail if new_suppliersShareRate > MAX', async () => {
@@ -217,74 +238,82 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
             let newSuppliersShareRate = suppliersShareRate.minus(suppliersShareRateMaxDecrease).minus(10);
             await expectRevert(HoldefiSettings.setSuppliersShareRate(SampleToken1.address, newSuppliersShareRate, {from: owner}),
                 "Rate should be decreased less than max allowed");
-        });
-        
+        });   
     })
     
     describe("Setting borrowRate", async() =>{
         beforeEach(async () =>{
-            await scenario(owner,ownerChanger,user1,user2,user3,user4);
-            this.maxBorrowRate = await HoldefiSettings.maxBorrowRate.call();
-            this.borrowRateMaxIncrease = await HoldefiSettings.borrowRateMaxIncrease.call();
+            await scenario(owner, user1, user2, user3, user4);
+            maxBorrowRate = await HoldefiSettings.maxBorrowRate.call();
+            borrowRateMaxIncrease = await HoldefiSettings.borrowRateMaxIncrease.call();
         })
 
         it('borrowRate should be set if decreased', async () => {
             await time.increase(time.duration.days(10));
             await HoldefiSettings.setBorrowRate(SampleToken1.address, ratesDecimal.multipliedBy(0.01), {from: owner});
 
-            let getInterests = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
+            let getBorrowInterests = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterests = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
             let getMarket = await Holdefi.marketAssets(SampleToken1.address);
-            assert.equal(getInterests.borrowRate.toString(), ratesDecimal.multipliedBy(0.01).toString(), "Borrow rate set");
+            assert.equal(getBorrowInterests.borrowRate.toString(), ratesDecimal.multipliedBy(0.01).toString(), "Borrow rate set");
 
             let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
-            let supplyRate = bigNumber(getMarket.totalBorrow).multipliedBy(getInterests.borrowRate).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarket.totalSupply);
-            assert.equal(getInterests.supplyRate.toString(), supplyRate.toString(), "Supply rate set");
+            let supplyRate = bigNumber(getMarket.totalBorrow).multipliedBy(getBorrowInterests.borrowRate).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarket.totalSupply);
+            assert.equal(getSupplyInterests.supplyRate.toString(), supplyRate.toString(), "Supply rate set");
         });
 
         it('borrowRate should be set if increased less than maxIncrease', async () => {
             await time.increase(time.duration.days(10));
             await HoldefiSettings.setBorrowRate(SampleToken1.address, ratesDecimal.multipliedBy(0.15), {from: owner});
 
-            let getInterests = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
+            let getBorrowInterests = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterests = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
             let getMarket = await Holdefi.marketAssets(SampleToken1.address);
-            assert.equal(getInterests.borrowRate.toString(), ratesDecimal.multipliedBy(0.15).toString(), "Borrow rate set");
+            assert.equal(getBorrowInterests.borrowRate.toString(), ratesDecimal.multipliedBy(0.15).toString(), "Borrow rate set");
 
             let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
-            let supplyRate = bigNumber(getMarket.totalBorrow).multipliedBy(getInterests.borrowRate).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarket.totalSupply);
-            assert.equal(getInterests.supplyRate.toString(), supplyRate.toString(), "Supply rate set");
+            let supplyRate = bigNumber(getMarket.totalBorrow).multipliedBy(getBorrowInterests.borrowRate).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarket.totalSupply);
+            assert.equal(getSupplyInterests.supplyRate.toString(), supplyRate.toString(), "Supply rate set");
         });
 
         it('Supply interest should be changed after changing borrowRate', async () => {
             let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
             await assignToken(owner, user5, SampleToken1);
-            await Holdefi.methods['supply(address,uint256)'](SampleToken1.address, decimal18.multipliedBy(20), {from:user5});
+            await Holdefi.methods['supply(address,uint256,uint16)'](
+                SampleToken1.address,
+                await convertToDecimals(SampleToken1, 20),
+                referalCode,
+                {from:user5}
+            );
             let time1 = await time.latest();
             let getMarketBefore = await Holdefi.marketAssets(SampleToken1.address);
 
             await time.increase(time.duration.days(40));
-            let getInterestsBefore = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
-            await HoldefiSettings.setBorrowRate(SampleToken1.address, bigNumber(getInterestsBefore.borrowRate).multipliedBy(1.05), {from: owner});
+            let getBorrowInterestsBefore = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterestsBefore = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
+            await HoldefiSettings.setBorrowRate(SampleToken1.address, bigNumber(getBorrowInterestsBefore.borrowRate).multipliedBy(1.05), {from: owner});
             let time2 = await time.latest();
-            let getInterestsAfter = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
+            let getBorrowInterestsAfter = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterestsAfter = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
 
             await time.increase(time.duration.days(40));
             let getAccountSupply = await Holdefi.getAccountSupply(user5,SampleToken1.address);
             let time3 = await time.latest();
-            await Holdefi.updatePromotionReserve(SampleToken1.address);
+            await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
             let time4 = await time.latest();
             let getMarketAfter = await Holdefi.marketAssets(SampleToken1.address);
 
-            let interestScaled1 = bigNumber(time2-time1).multipliedBy(getAccountSupply.balance).multipliedBy(getInterestsBefore.supplyRate);
-            let interestScaled2 = bigNumber(time3-time2).multipliedBy(getAccountSupply.balance).multipliedBy(getInterestsAfter.supplyRate);
+            let interestScaled1 = bigNumber(time2-time1).multipliedBy(getAccountSupply.balance).multipliedBy(getSupplyInterestsBefore.supplyRate);
+            let interestScaled2 = bigNumber(time3-time2).multipliedBy(getAccountSupply.balance).multipliedBy(getSupplyInterestsAfter.supplyRate);
             let totalInterest = interestScaled1.plus(interestScaled2).dividedToIntegerBy(secondsPerYear).dividedToIntegerBy(ratesDecimal);
 
-            let reserveInterestScaled1 = bigNumber(time2-time1).multipliedBy((bigNumber(getMarketBefore.totalBorrow).multipliedBy(getInterestsBefore.borrowRate)).minus(bigNumber(getMarketBefore.totalSupply).multipliedBy(getInterestsBefore.supplyRate)));
-            let reserveInterestScaled2 = bigNumber(time4-time2).multipliedBy((bigNumber(getMarketAfter.totalBorrow).multipliedBy(getInterestsAfter.borrowRate)).minus(bigNumber(getMarketAfter.totalSupply).multipliedBy(getInterestsAfter.supplyRate)));
+            let reserveInterestScaled1 = bigNumber(time2-time1).multipliedBy((bigNumber(getMarketBefore.totalBorrow).multipliedBy(getBorrowInterestsBefore.borrowRate)).minus(bigNumber(getMarketBefore.totalSupply).multipliedBy(getSupplyInterestsBefore.supplyRate)));
+            let reserveInterestScaled2 = bigNumber(time4-time2).multipliedBy((bigNumber(getMarketAfter.totalBorrow).multipliedBy(getBorrowInterestsAfter.borrowRate)).minus(bigNumber(getMarketAfter.totalSupply).multipliedBy(getSupplyInterestsAfter.supplyRate)));
             let totalReserveScaled = bigNumber(getMarketBefore.promotionReserveScaled).plus(reserveInterestScaled1).plus(reserveInterestScaled2)
             
-            let supplyRateAfter = bigNumber(getMarketBefore.totalBorrow).multipliedBy(getInterestsBefore.borrowRate).multipliedBy(1.05).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarketBefore.totalSupply);
+            let supplyRateAfter = bigNumber(getMarketBefore.totalBorrow).multipliedBy(getBorrowInterestsBefore.borrowRate).multipliedBy(1.05).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarketBefore.totalSupply);
 
-            assert.equal(getInterestsAfter.supplyRate.toString(), supplyRateAfter.toString(), 'Supply Rate increased');
+            assert.equal(getSupplyInterestsAfter.supplyRate.toString(), supplyRateAfter.toString(), 'Supply Rate increased');
             assert.equal(getAccountSupply.interest.toString(), totalInterest.toString(), 'Supply interest increased correctly');
             assert.equal(getMarketAfter.promotionReserveScaled.toString(),totalReserveScaled.toString(), 'Promotion Reserve increased correctly')
         });
@@ -292,34 +321,42 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
         it('Borrow interest should be changed after changing borrowRate', async () => {
             let suppliersShareRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).suppliersShareRate;
             await Holdefi.methods['collateralize()']({from:user5, value: decimal18.multipliedBy(1)});
-            await Holdefi.borrow(SampleToken1.address, constants.ZERO_ADDRESS, decimal18.multipliedBy(5), {from: user5});
+            await Holdefi.borrow(
+                SampleToken1.address,
+                ethAddress,
+                await convertToDecimals(SampleToken1, 5),
+                referalCode,
+                {from: user5});
             let time1 = await time.latest();
             let getMarketBefore = await Holdefi.marketAssets(SampleToken1.address);
 
             await time.increase(time.duration.days(40));
-            let getInterestsBefore = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
-            await HoldefiSettings.setBorrowRate(SampleToken1.address, bigNumber(getInterestsBefore.borrowRate).multipliedBy(1.05), {from: owner});
+            let getBorrowInterestsBefore = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterestsBefore = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
+
+            await HoldefiSettings.setBorrowRate(SampleToken1.address, bigNumber(getBorrowInterestsBefore.borrowRate).multipliedBy(1.05), {from: owner});
             let time2 = await time.latest();
-            let getInterestsAfter = await Holdefi.getCurrentInterestIndex(SampleToken1.address);
+            let getBorrowInterestsAfter = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            let getSupplyInterestsAfter = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
 
             await time.increase(time.duration.days(40));
-            let getAccountBorrow = await Holdefi.getAccountBorrow(user5,SampleToken1.address, constants.ZERO_ADDRESS);
+            let getAccountBorrow = await Holdefi.getAccountBorrow(user5,SampleToken1.address, ethAddress);
             let time3 = await time.latest();
-            await Holdefi.updatePromotionReserve(SampleToken1.address);
+            await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
             let time4 = await time.latest();
             let getMarketAfter = await Holdefi.marketAssets(SampleToken1.address);
 
-            let interestScaled1 = bigNumber(time2-time1).multipliedBy(getAccountBorrow.balance).multipliedBy(getInterestsBefore.borrowRate);
-            let interestScaled2 = bigNumber(time3-time2).multipliedBy(getAccountBorrow.balance).multipliedBy(getInterestsAfter.borrowRate);
+            let interestScaled1 = bigNumber(time2-time1).multipliedBy(getAccountBorrow.balance).multipliedBy(getBorrowInterestsBefore.borrowRate);
+            let interestScaled2 = bigNumber(time3-time2).multipliedBy(getAccountBorrow.balance).multipliedBy(getBorrowInterestsAfter.borrowRate);
             let totalInterest = interestScaled1.plus(interestScaled2).dividedToIntegerBy(secondsPerYear).dividedToIntegerBy(ratesDecimal).plus(1);
 
-            let reserveInterestScaled1 = bigNumber(time2-time1).multipliedBy((bigNumber(getMarketBefore.totalBorrow).multipliedBy(getInterestsBefore.borrowRate)).minus(bigNumber(getMarketBefore.totalSupply).multipliedBy(getInterestsBefore.supplyRate)));
-            let reserveInterestScaled2 = bigNumber(time4-time2).multipliedBy((bigNumber(getMarketAfter.totalBorrow).multipliedBy(getInterestsAfter.borrowRate)).minus(bigNumber(getMarketAfter.totalSupply).multipliedBy(getInterestsAfter.supplyRate)));
+            let reserveInterestScaled1 = bigNumber(time2-time1).multipliedBy((bigNumber(getMarketBefore.totalBorrow).multipliedBy(getBorrowInterestsBefore.borrowRate)).minus(bigNumber(getMarketBefore.totalSupply).multipliedBy(getSupplyInterestsBefore.supplyRate)));
+            let reserveInterestScaled2 = bigNumber(time4-time2).multipliedBy((bigNumber(getMarketAfter.totalBorrow).multipliedBy(getBorrowInterestsAfter.borrowRate)).minus(bigNumber(getMarketAfter.totalSupply).multipliedBy(getSupplyInterestsAfter.supplyRate)));
             let totalReserveScaled = bigNumber(getMarketBefore.promotionReserveScaled).plus(reserveInterestScaled1).plus(reserveInterestScaled2)
             
-            let supplyRateAfter = bigNumber(getMarketBefore.totalBorrow).multipliedBy(getInterestsBefore.borrowRate).multipliedBy(1.05).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarketBefore.totalSupply);
+            let supplyRateAfter = bigNumber(getMarketBefore.totalBorrow).multipliedBy(getBorrowInterestsBefore.borrowRate).multipliedBy(1.05).multipliedBy(suppliersShareRate).dividedToIntegerBy(ratesDecimal).dividedToIntegerBy(getMarketBefore.totalSupply);
 
-            assert.equal(getInterestsAfter.supplyRate.toString(), supplyRateAfter.toString(), 'Supply Rate increased');
+            assert.equal(getSupplyInterestsAfter.supplyRate.toString(), supplyRateAfter.toString(), 'Supply Rate increased');
             assert.equal(getAccountBorrow.interest.toString(), totalInterest.toString(), 'Borrow interest increased correctly')
             assert.equal(getMarketAfter.promotionReserveScaled.toString(),totalReserveScaled.toString(), 'Promotion Reserve increased correctly');
         });
@@ -327,7 +364,7 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
 
         it('Fail if called by other accounts',async () =>{
             await expectRevert(HoldefiSettings.setBorrowRate(SampleToken1.address, ratesDecimal.multipliedBy(0.15), {from: user1}),
-                "Sender should be Owner");
+                "Sender should be owner");
         })
 
         it('Fail if new_borrowRate > MAX', async () => {
@@ -353,9 +390,122 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
         });
     });
 
+    describe("Set promotion rate", async() =>{
+        beforeEach(async () =>{
+            await scenario(owner,user1,user2,user3,user4);
+            await time.increase(time.duration.days(5));
+        })
+        
+        it('Should set promotion rate if promotionDebtScaled = 0',async () =>{
+            await assignToken(owner, owner, SampleToken1);
+            let supplyRateBefore = (await Holdefi.getCurrentSupplyIndex(SampleToken1.address)).supplyRate;            
+            let getMarketBefore = await Holdefi.marketAssets(SampleToken1.address);
+            await Holdefi.depositPromotionReserve(SampleToken1.address, await convertToDecimals(SampleToken1, 10));
+            await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1));
+            let time1 = await time.latest();
+            await time.increase(time.duration.days(10));
+        
+            let promotionDebt = (await Holdefi.getPromotionDebt(SampleToken1.address)).promotionDebtScaled;  
+            let time2 = await time.latest();
+
+            let supplyRateAfter = (await Holdefi.getCurrentSupplyIndex(SampleToken1.address)).supplyRate;
+            let promotionRate = (await HoldefiSettings.marketAssets(SampleToken1.address)).promotionRate;
+
+            let debtScaled = bigNumber(time2-time1).multipliedBy(getMarketBefore.totalSupply).multipliedBy(ratesDecimal.multipliedBy(0.1));
+
+            assert.equal(supplyRateAfter.toString(), bigNumber(supplyRateBefore).plus(promotionRate).toString(),'Promotion rate should be added to supply rate')
+            assert.equal(promotionRate.toString() , ratesDecimal.multipliedBy(0.1).toString(),'Promotion rate should be set');          
+            assert.equal(debtScaled.toString() , promotionDebt.toString(), 'Promotion debt increased correctly');
+        })
+
+        it('Should set promotion rate if promotionDebtScaled > 0',async () =>{
+            await assignToken(owner, owner, SampleToken1);
+            let supplyRateBefore = (await Holdefi.getCurrentSupplyIndex(SampleToken1.address)).supplyRate;            
+            let getMarketBefore = await Holdefi.marketAssets(SampleToken1.address);
+            await Holdefi.depositPromotionReserve(SampleToken1.address, await convertToDecimals(SampleToken1, 10));
+            await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1));
+            await time.increase(time.duration.days(10));
+
+            await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1));
+
+            let currentMarket = await Holdefi.marketAssets(SampleToken1.address);
+
+            let promotionReserveBefore = (await Holdefi.getPromotionReserve(SampleToken1.address)).promotionReserveScaled;           
+            let promotionDebtBefore = (await Holdefi.getPromotionDebt(SampleToken1.address)).promotionDebtScaled; 
+
+            let promotionReserveAfter = currentMarket.promotionReserveScaled;
+            let promotionRateAfter = (await HoldefiSettings.marketAssets(SampleToken1.address)).promotionRate;
+            let promotionDebtAfter = currentMarket.promotionDebtScaled;
+            let supplyRateAfter = (await Holdefi.getCurrentSupplyIndex(SampleToken1.address)).supplyRate;
+
+            assert.equal(supplyRateAfter.toString(), bigNumber(supplyRateBefore).plus(promotionRateAfter).toString(),'Promotion rate should be added to supply rate')
+            assert.equal(promotionRateAfter.toString() , ratesDecimal.multipliedBy(0.1).toString(),'Promotion rate should be set');         
+            assert.equal(promotionDebtAfter.toString() , 0,'Promotion debt should be 0');
+            assert.equal(promotionReserveAfter.toString() , bigNumber(promotionReserveBefore).minus(promotionDebtBefore).toString(),'Promotion debt should be decreased from promotion reserve');
+        })
+
+        it('Supply interest should be changed after changing promotionRate', async () => {
+            await assignToken(owner, user5, SampleToken1);
+            await Holdefi.methods['supply(address,uint256,uint16)'](
+                SampleToken1.address,
+                await convertToDecimals(SampleToken1, 20),
+                referalCode,
+                {from:user5}
+            );
+            let time1 = await time.latest();
+            let getMarketBefore = await Holdefi.marketAssets(SampleToken1.address);
+
+            await time.increase(time.duration.days(40));
+            let getAccountSupply1 = await Holdefi.getAccountSupply(user5,SampleToken1.address);
+            let getSupplyInterestsBefore = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
+            let getBorrowInterestsBefore = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+            await HoldefiSettings.setPromotionRate(SampleToken1.address, getSupplyInterestsBefore.supplyRate, {from: owner});
+            let time2 = await time.latest();
+            let getSupplyInterestsAfter = await Holdefi.getCurrentSupplyIndex(SampleToken1.address);
+            let getBorrowInterestsAfter = await Holdefi.getCurrentBorrowIndex(SampleToken1.address);
+
+            await time.increase(time.duration.days(40));
+            let getAccountSupply2 = await Holdefi.getAccountSupply(user5,SampleToken1.address);
+            let time3 = await time.latest();
+            await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
+            let time4 = await time.latest();
+            let getMarketAfter = await Holdefi.marketAssets(SampleToken1.address);
+
+            let interestScaled1 = bigNumber(time2-time1).multipliedBy(getAccountSupply2.balance).multipliedBy(getSupplyInterestsBefore.supplyRate);
+            let interestScaled2 = bigNumber(time3-time2).multipliedBy(getAccountSupply2.balance).multipliedBy(getSupplyInterestsAfter.supplyRate);
+            let totalInterest = interestScaled1.plus(interestScaled2).dividedToIntegerBy(secondsPerYear).dividedToIntegerBy(ratesDecimal);
+
+            let reserveInterestScaled1 = bigNumber(time2-time1).multipliedBy((bigNumber(getMarketBefore.totalBorrow).multipliedBy(getBorrowInterestsBefore.borrowRate)).minus(bigNumber(getMarketBefore.totalSupply).multipliedBy(getSupplyInterestsBefore.supplyRate)));
+            let reserveInterestScaled2 = bigNumber(time4-time2).multipliedBy((bigNumber(getMarketAfter.totalBorrow).multipliedBy(getBorrowInterestsAfter.borrowRate)).minus(bigNumber(getMarketAfter.totalSupply).multipliedBy(getSupplyInterestsAfter.supplyRate-getSupplyInterestsBefore.supplyRate)));
+            let totalReserveScaled = bigNumber(getMarketBefore.promotionReserveScaled).plus(reserveInterestScaled1).plus(reserveInterestScaled2);
+
+            assert.equal(interestScaled2.toString(), interestScaled1.multipliedBy(2).toString(),'Supplier should earn more interest in the period that includes promotion');
+            assert.equal(getAccountSupply2.interest.toString(), totalInterest.toString(), 'Supply interest increased correctly');
+            assert.equal(getMarketAfter.promotionReserveScaled.toString(), totalReserveScaled.toString(), 'Promotion Reserve increased correctly')
+        });
+
+        it('Fail if promotion rate is more than maxPromotionRate',async () =>{
+            let maxPromotionRate = await HoldefiSettings.maxPromotionRate.call();
+            await expectRevert(HoldefiSettings.setPromotionRate(SampleToken1.address, bigNumber(maxPromotionRate).plus(1).toString()),
+                "Rate should be in allowed range");
+        })
+
+        it('Fail if reserve is less than debt',async () =>{
+            await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1));
+            await time.increase(time.duration.days(100));
+            await expectRevert(HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.05)),
+                "Not enough promotion reserve");
+        })
+
+        it('Fail if set by other accounts',async () =>{
+            await expectRevert(HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1), {from: user2}),
+                "Sender should be owner");
+        })
+    })
+
     describe("Add collateral", async() =>{
         beforeEach(async () =>{
-            await initializeContracts(owner, ownerChanger);
+            await initializeContracts(owner);
         })
 
         it('Add collateral by owner',async () =>{
@@ -369,7 +519,7 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
 
         it('Fail if collateral added by other accounts',async () =>{
             await expectRevert(HoldefiSettings.addCollateral(SampleToken1.address, ratesDecimal.multipliedBy(1.5), ratesDecimal.multipliedBy(1.2), ratesDecimal.multipliedBy(1.05) ,{from: user1}),
-            "Sender should be Owner");
+            "Sender should be owner");
         })
 
         it('Fail if valueToLoanRate > MAX',async () =>{
@@ -405,47 +555,35 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
          it('Fail if collateral exists',async () =>{
             await HoldefiSettings.addCollateral(SampleToken1.address, ratesDecimal.multipliedBy(1.5), ratesDecimal.multipliedBy(1.2), ratesDecimal.multipliedBy(1.05));
             await expectRevert(HoldefiSettings.addCollateral(SampleToken1.address, ratesDecimal.multipliedBy(1.5), ratesDecimal.multipliedBy(1.2), ratesDecimal.multipliedBy(1.05)),
-                "Collateral exists");
+                "The collateral is exist");
         })
 
-    })
-
-    describe("Remove collateral", async() =>{
-        beforeEach(async () =>{
-            await initializeContracts(owner, ownerChanger);
-            await HoldefiSettings.addCollateral(SampleToken1.address, ratesDecimal.multipliedBy(1.5), ratesDecimal.multipliedBy(1.2), ratesDecimal.multipliedBy(1.05));
-        })
-
-        it('Remove collateral by owner',async () =>{
-            await HoldefiSettings.removeCollateral(SampleToken1.address);
-            let collateralFeatures = await HoldefiSettings.collateralAssets(SampleToken1.address);
-            assert.isFalse(collateralFeatures.isActive);                        
-        })
-
-        it('Fail if collateral removed by other accounts',async () =>{
-            await expectRevert(HoldefiSettings.removeCollateral(SampleToken1.address,{from: user1}),
-                "Sender should be Owner");                  
-        })
     })
     
     describe("Setting valueToLoanRate", async() =>{
         beforeEach(async () =>{
-            await initializeContracts(owner, ownerChanger);
-            this.maxValueToLoanRate = await HoldefiSettings.maxValueToLoanRate.call();
-            this.valueToLoanRateMaxIncrease = await HoldefiSettings.valueToLoanRateMaxIncrease.call();
+            await initializeContracts(owner);
+            maxValueToLoanRate = await HoldefiSettings.maxValueToLoanRate.call();
+            valueToLoanRateMaxIncrease = await HoldefiSettings.valueToLoanRateMaxIncrease.call();
 
-            this.valueToLoanRate = ratesDecimal.multipliedBy(1.4);
-            this.penaltyRate = ratesDecimal.multipliedBy(1.2);
-            this.bonusRate = ratesDecimal.multipliedBy(1.05);
-            await addERC20Collateral(owner, SampleToken1.address, decimal18.multipliedBy(10), 
-                valueToLoanRate, penaltyRate, bonusRate);
+            valueToLoanRate = ratesDecimal.multipliedBy(1.4);
+            penaltyRate = ratesDecimal.multipliedBy(1.2);
+            bonusRate = ratesDecimal.multipliedBy(1.05);
+            //ETH Collateral: valueToLoanRate = 150%, penaltyRate = 120%, bonusRate = 105%
+            await HoldefiSettings.addCollateral(
+                SampleToken1.address,
+                valueToLoanRate, 
+                penaltyRate,
+                bonusRate,
+                {from:owner}
+            );
         })
 
         it('valueToLoanRate should be set if decreased',async () =>{
             await time.increase(time.duration.days(10));        
-            await HoldefiSettings.setValueToLoanRate(SampleToken1.address, ratesDecimal.multipliedBy(1.22));
+            await HoldefiSettings.setValueToLoanRate(SampleToken1.address, ratesDecimal.multipliedBy(1.42));
             let collateralFeatures = await HoldefiSettings.collateralAssets(SampleToken1.address);
-            assert.equal(collateralFeatures.valueToLoanRate.toString(), ratesDecimal.multipliedBy(1.22).toString());
+            assert.equal(collateralFeatures.valueToLoanRate.toString(), ratesDecimal.multipliedBy(1.42).toString());
         })
 
         it('valueToLoanRate should be set if increased less than maxIncrease',async () =>{
@@ -458,7 +596,7 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
         it('Fail if valueToLoanRate set by other accounts',async () =>{ 
             await time.increase(time.duration.days(10));
             await expectRevert(HoldefiSettings.setValueToLoanRate(SampleToken1.address, ratesDecimal.multipliedBy(1.35), {from: user1}),
-                "Sender should be Owner");
+                "Sender should be owner");
         })
 
         it('Fail if try to increase valueToLoanRate in less than 10 days',async () =>{
@@ -501,15 +639,21 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
     
     describe("Setting penaltyRate", async() =>{
         beforeEach(async () =>{
-            await initializeContracts(owner, ownerChanger);
-            this.maxPenaltyRate = await HoldefiSettings.maxPenaltyRate.call();
-            this.penaltyRateMaxIncrease = await HoldefiSettings.penaltyRateMaxIncrease.call();
+            await initializeContracts(owner);
+            maxPenaltyRate = await HoldefiSettings.maxPenaltyRate.call();
+            penaltyRateMaxIncrease = await HoldefiSettings.penaltyRateMaxIncrease.call();
 
-            this.valueToLoanRate = ratesDecimal.multipliedBy(1.4);
-            this.penaltyRate = ratesDecimal.multipliedBy(1.2);
-            this.bonusRateRate = ratesDecimal.multipliedBy(1.05);
-            await addERC20Collateral(owner, SampleToken1.address, decimal18.multipliedBy(10), 
-                valueToLoanRate, penaltyRate, bonusRate);
+            valueToLoanRate = ratesDecimal.multipliedBy(1.35);
+            penaltyRate = ratesDecimal.multipliedBy(1.2);
+            bonusRate = ratesDecimal.multipliedBy(1.05);
+            //ETH Collateral: valueToLoanRate = 150%, penaltyRate = 120%, bonusRate = 105%
+            await HoldefiSettings.addCollateral(
+                SampleToken1.address,
+                valueToLoanRate, 
+                penaltyRate,
+                bonusRate,
+                {from:owner}
+            );
         })
 
         it('penaltyRate should be set if decreased',async () =>{
@@ -529,7 +673,7 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
         it('Fail if penaltyRate set by other accounts',async () =>{
             await time.increase(time.duration.days(10));
             await expectRevert(HoldefiSettings.setPenaltyRate(SampleToken1.address, ratesDecimal.multipliedBy(1.15), {from: user1}),
-                "Sender should be Owner");      
+                "Sender should be owner");      
         })
 
         it('Fail if try to increase penaltyRate changed less than 10 days',async () =>{
@@ -542,9 +686,9 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
             let newPenaltyRate = penaltyRate;
             while (newPenaltyRate.isLessThanOrEqualTo(maxPenaltyRate)) {
                 await time.increase(time.duration.days(10));
-                await HoldefiSettings.setValueToLoanRate(SampleToken1.address, newPenaltyRate);
+                await HoldefiSettings.setPenaltyRate(SampleToken1.address, newPenaltyRate);
                 let collateralFeatures = await HoldefiSettings.collateralAssets(SampleToken1.address);
-                assert.equal(collateralFeatures.valueToLoanRate.toString(), newPenaltyRate.toString());
+                assert.equal(collateralFeatures.penaltyRate.toString(), newPenaltyRate.toString());
                 newPenaltyRate = newPenaltyRate.plus(penaltyRateMaxIncrease);
             }
 
@@ -560,13 +704,13 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
                 "Rate should be in allowed range");
         })
 
-        it('Fail if new_penaltyRate > valueToLoanRate',async () =>{ //temp
+        it('Fail if new_penaltyRate > valueToLoanRate',async () =>{
             let newPenaltyRate = penaltyRate;
-            while (newPenaltyRate.isLessThanOrEqualTo(valueToLoanRate)) {
+            while (newPenaltyRate.isLessThanOrEqualTo(valueToLoanRate - 500)) {
                 await time.increase(time.duration.days(10));
-                await HoldefiSettings.setValueToLoanRate(SampleToken1.address, newPenaltyRate);
+                await HoldefiSettings.setPenaltyRate(SampleToken1.address, newPenaltyRate);
                 let collateralFeatures = await HoldefiSettings.collateralAssets(SampleToken1.address);
-                assert.equal(collateralFeatures.valueToLoanRate.toString(), newPenaltyRate.toString());
+                assert.equal(collateralFeatures.penaltyRate.toString(), newPenaltyRate.toString());
                 newPenaltyRate = newPenaltyRate.plus(penaltyRateMaxIncrease);
             }
 
@@ -585,13 +729,19 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
 
     describe("Setting bonusRate", async() =>{
         beforeEach(async () =>{
-            await initializeContracts(owner, ownerChanger);
+            await initializeContracts(owner);
 
-            this.valueToLoanRate = ratesDecimal.multipliedBy(1.4);
-            this.penaltyRate = ratesDecimal.multipliedBy(1.2);
-            this.bonusRate = ratesDecimal.multipliedBy(1.05);
-            await addERC20Collateral(owner, SampleToken1.address, decimal18.multipliedBy(10), 
-                valueToLoanRate, penaltyRate, bonusRate);
+            valueToLoanRate = ratesDecimal.multipliedBy(1.4);
+            penaltyRate = ratesDecimal.multipliedBy(1.2);
+            bonusRate = ratesDecimal.multipliedBy(1.05);
+            //ETH Collateral: valueToLoanRate = 150%, penaltyRate = 120%, bonusRate = 105%
+            await HoldefiSettings.addCollateral(
+                SampleToken1.address,
+                valueToLoanRate, 
+                penaltyRate,
+                bonusRate,
+                {from:owner}
+            );
         })
     
         it('bonusRate should be set',async () =>{   
@@ -602,7 +752,7 @@ contract('HoldefiSettings', function([owner,ownerChanger,user1,user2,user3,user4
 
         it('Fail if bonusRate set by other accounts',async () =>{
             await expectRevert(HoldefiSettings.setBonusRate(SampleToken1.address, ratesDecimal.multipliedBy(1.1), {from: user1}),
-                "Sender should be Owner");      
+                "Sender should be owner");      
         })
 
         it('Fail if new_bonusRate > penaltyRate',async () =>{
