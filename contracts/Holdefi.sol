@@ -218,6 +218,11 @@ contract Holdefi is HoldefiPausableOwnable {
         _;
     }
 
+    modifier accountIsValid(address account) {
+		require (msg.sender != account, "Account is not valid");
+        _;
+    }
+
     receive() external payable {
         revert();
     }
@@ -510,6 +515,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	function approveWithdrawSupply(address account, address market, uint256 amount)
 		external
+		accountIsValid(account)
 		marketIsActive(market)
 	{
 		supplies[msg.sender][market].allowance[account] = amount;
@@ -555,6 +561,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	function approveWithdrawCollateral (address account, address collateral, uint256 amount)
 		external
+		accountIsValid(account)
 		collateralIsActive(collateral)
 	{
 		collaterals[msg.sender][collateral].allowance[account] = amount;
@@ -580,6 +587,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	function approveBorrow (address account, address market, address collateral, uint256 amount)
 		external
+		accountIsValid(account)
 		marketIsActive(market)
 	{
 		borrows[msg.sender][collateral][market].allowance[account] = amount;
@@ -633,7 +641,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		whenNotPaused("liquidateBorrowerCollateral")
 	{
 		(uint256 borrowBalance, uint256 borrowInterest,) = getAccountBorrow(borrower, market, collateral);
-		require (borrowBalance > 0, "User should have debt for the market");
+		require (borrowBalance > 0, "User should have debt");
 
 		(,uint256 timeSinceLastActivity,,, bool underCollateral) =
 			getAccountCollateral(borrower, collateral);
