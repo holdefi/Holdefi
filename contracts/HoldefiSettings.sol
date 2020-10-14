@@ -5,7 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./HoldefiOwnable.sol";
 
-
+/// @notice File: contracts/Holdefi.sol
 interface HoldefiInterface {
 	struct Market {
 		uint256 totalSupply;
@@ -29,11 +29,14 @@ interface HoldefiInterface {
 	function reserveSettlement (address market) external;
 }
 
-
+/// @title HoldefiSettings contract
+/// @author Holdefi Team
+/// @notice This contract is for Holdefi settings implementation
 contract HoldefiSettings is HoldefiOwnable {
 
 	using SafeMath for uint256;
 
+	/// @notice Markets Features
 	struct MarketSettings {
 		bool isExist;		// Market is exist or not
 		bool isActive;		// Market is open for deposit or not
@@ -47,6 +50,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		uint256 promotionRate;
 	}
 
+	/// @notice Collateral Features
 	struct CollateralSettings {
 		bool isExist;		// Collateral is exist or not
 		bool isActive;		// Collateral is open for deposit or not
@@ -82,10 +86,10 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	uint256 constant public maxPromotionRate = 3000;				// 30%
 
-	uint256 constant public maxListsLenght = 25;
-		
-	// Used for calculating liquidation threshold 
-	// There is 5% gap between value to loan rate and liquidation rate
+	uint256 constant public maxListsLength = 25;
+
+	/// @dev Used for calculating liquidation threshold 
+	/// There is 5% gap between value to loan rate and liquidation rate
 	uint256 constant private fivePercentLiquidationGap = 500;
 
 	mapping (address => MarketSettings) public marketAssets;
@@ -95,64 +99,96 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	HoldefiInterface public holdefiContract;
 
+	/// @notice Event emitted when market activation status is changed
 	event MarketActivationChanged(address indexed market, bool status);
 
+	/// @notice Event emitted when collateral activation status is changed
 	event CollateralActivationChanged(address indexed collateral, bool status);
 
+	/// @notice Event emitted when market existence status is changed
 	event MarketExistenceChanged(address indexed market, bool status);
 
+	/// @notice Event emitted when collateral existence status is changed
 	event CollateralExistenceChanged(address indexed collateral, bool status);
 
+	/// @notice Event emitted when market borrow rate is changed
 	event BorrowRateChanged(address indexed market, uint256 newRate, uint256 oldRate);
 
+	/// @notice Event emitted when market suppliers share rate is changed
 	event SuppliersShareRateChanged(address indexed market, uint256 newRate, uint256 oldRate);
 
+	/// @notice Event emitted when market promotion rate is changed
 	event PromotionRateChanged(address indexed market, uint256 newRate, uint256 oldRate);
 
+	/// @notice Event emitted when collateral value to loan rate is changed
 	event ValueToLoanRateChanged(address indexed collateral, uint256 newRate, uint256 oldRate);
 
+	/// @notice Event emitted when collateral penalty rate is changed
 	event PenaltyRateChanged(address indexed collateral, uint256 newRate, uint256 oldRate);
 
+	/// @notice Event emitted when collateral bonus rate is changed
 	event BonusRateChanged(address indexed collateral, uint256 newRate, uint256 oldRate);
 
 
+
+	/// @dev Modifier to make a function callable only when the market is exist
+	/// @param market Address of the given market
     modifier marketIsExist(address market) {
         require (marketAssets[market].isExist, "The market is not exist");
         _;
     }
 
+	/// @dev Modifier to make a function callable only when the collateral is exist
+	/// @param collateral Address of the given collateral
     modifier collateralIsExist(address collateral) {
         require (collateralAssets[collateral].isExist, "The collateral is not exist");
         _;
     }
 
+	/// @notice you cannot send ETH to this contract
     receive() external payable {
         revert();
     }
 
-
+ 	/// @notice Activate a market asset
+	/// @dev Can only be called by the owner
+	/// @param market Address of the given market
 	function activateMarket (address market) public onlyOwner marketIsExist(market) {
 		activateMarketInternal(market);
 	}
 
+	/// @notice Deactivate a market asset
+	/// @dev Can only be called by the owner
+	/// @param market Address of the given market
 	function deactivateMarket (address market) public onlyOwner marketIsExist(market) {
 		marketAssets[market].isActive = false;
 		emit MarketActivationChanged(market, false);
 	}
 
+	/// @notice Activate a collateral asset
+	/// @dev Can only be called by the owner
+	/// @param collateral Address the given collateral
 	function activateCollateral (address collateral) public onlyOwner collateralIsExist(collateral) {
 		activateCollateralInternal(collateral);
 	}
 
+	/// @notice Deactivate a collateral asset
+	/// @dev Can only be called by the owner
+	/// @param collateral Address of the given collateral
 	function deactivateCollateral (address collateral) public onlyOwner collateralIsExist(collateral) {
 		collateralAssets[collateral].isActive = false;
 		emit CollateralActivationChanged(collateral, false);
 	}
 
+	/// @notice Returns the list of markets
+	/// @return res List of markets
 	function getMarketsList() external view returns (address[] memory res){
 		res = marketsList;
 	}
 
+	/// @notice Disposable function to interact with Holdefi contract
+	/// @dev Can only be called by the owner
+	/// @param holdefiContractAddress Address of the Holdefi contract
 	function setHoldefiContract(HoldefiInterface holdefiContractAddress) external onlyOwner {
 		require (holdefiContractAddress.holdefiSettings() == address(this),
 			"Conflict with Holdefi contract address"
@@ -161,6 +197,12 @@ contract HoldefiSettings is HoldefiOwnable {
 		holdefiContract = holdefiContractAddress;
 	}
 
+	/// @notice Returns supply, borrow and promotion rate of the given market
+	/// @dev supplyRate = (totalBorrow * borrowRate) * suppliersShareRate / totalSupply
+	/// @param market Address of the given market
+	/// @return borrowRate Borrow rate of the given market
+	/// @return supplyRateBase Supply rate base of the given market
+	/// @return promotionRate Promotion rate of the given market
 	function getInterests (address market)
 		external
 		view
@@ -182,6 +224,11 @@ contract HoldefiSettings is HoldefiOwnable {
 		promotionRate = marketAssets[market].promotionRate;
 	}
 
+
+	/// @notice Set promotion rate for a market
+	/// @dev Can only be called by the owner
+	/// @param market Address of the given market
+	/// @param newPromotionRate New promotion rate
 	function setPromotionRate (address market, uint256 newPromotionRate) external onlyOwner {
 		require (newPromotionRate <= maxPromotionRate, "Rate should be in allowed range");
 
@@ -192,6 +239,9 @@ contract HoldefiSettings is HoldefiOwnable {
 		marketAssets[market].promotionRate = newPromotionRate;
 	}
 
+	/// @notice Reset promotion rate of the market to zero
+	/// @dev Can only be called by holdefi contract
+	/// @param market Address of the given market
 	function resetPromotionRate (address market) external {
 		require (msg.sender == address(holdefiContract), "Sender is not Holdefi contract");
 
@@ -199,6 +249,10 @@ contract HoldefiSettings is HoldefiOwnable {
 		marketAssets[market].promotionRate = 0;
 	}
 
+	/// @notice Set borrow rate for a market
+	/// @dev Can only be called by the owner
+	/// @param market Address of the given market
+	/// @param newBorrowRate New borrow rate
 	function setBorrowRate (address market, uint256 newBorrowRate)
 		external 
 		onlyOwner
@@ -207,6 +261,10 @@ contract HoldefiSettings is HoldefiOwnable {
 		setBorrowRateInternal(market, newBorrowRate);
 	}
 
+	/// @notice Set suppliers share rate for a market
+	/// @dev Can only be called by the owner
+	/// @param market Address of the given market
+	/// @param newSuppliersShareRate New suppliers share rate
 	function setSuppliersShareRate (address market, uint256 newSuppliersShareRate)
 		external
 		onlyOwner
@@ -215,6 +273,10 @@ contract HoldefiSettings is HoldefiOwnable {
 		setSuppliersShareRateInternal(market, newSuppliersShareRate);
 	}
 
+	/// @notice Set value to loan rate for a collateral
+	/// @dev Can only be called by the owner
+	/// @param collateral Address of the given collateral
+	/// @param newValueToLoanRate New value to loan rate
 	function setValueToLoanRate (address collateral, uint256 newValueToLoanRate)
 		external
 		onlyOwner
@@ -223,6 +285,10 @@ contract HoldefiSettings is HoldefiOwnable {
 		setValueToLoanRateInternal(collateral, newValueToLoanRate);
 	}
 
+	/// @notice Set penalty rate for a collateral
+	/// @dev Can only be called by the owner
+	/// @param collateral Address of the given collateral
+	/// @param newPenaltyRate New penalty rate
 	function setPenaltyRate (address collateral, uint256 newPenaltyRate)
 		external
 		onlyOwner
@@ -231,6 +297,10 @@ contract HoldefiSettings is HoldefiOwnable {
 		setPenaltyRateInternal(collateral, newPenaltyRate);
 	}
 
+	/// @notice Set bonus rate for a collateral
+	/// @dev Can only be called by the owner
+	/// @param collateral Address of the given collateral
+	/// @param newBonusRate New bonus rate
 	function setBonusRate (address collateral, uint256 newBonusRate)
 		external
 		onlyOwner
@@ -239,12 +309,17 @@ contract HoldefiSettings is HoldefiOwnable {
 		setBonusRateInternal(collateral, newBonusRate); 
 	}
 
+	/// @notice Add a new asset as a market
+	/// @dev Can only be called by the owner
+	/// @param market Address of the new market
+	/// @param borrowRate BorrowRate of the new market
+	/// @param suppliersShareRate SuppliersShareRate of the new market
 	function addMarket (address market, uint256 borrowRate, uint256 suppliersShareRate)
 		external
 		onlyOwner
 	{
 		require (!marketAssets[market].isExist, "The market is exist");
-		require (marketsList.length < maxListsLenght, "Market list is full");
+		require (marketsList.length < maxListsLength, "Market list is full");
 		
 		marketsList.push(market);
 		marketAssets[market].isExist = true;
@@ -256,6 +331,9 @@ contract HoldefiSettings is HoldefiOwnable {
 		activateMarketInternal(market);		
 	}
 
+	/// @notice Remove a market asset
+	/// @dev Can only be called by the owner
+	/// @param market Address of the given market
 	function removeMarket (address market) external onlyOwner marketIsExist(market) {
 		uint256 totalBorrow = holdefiContract.marketAssets(market).totalBorrow;
 		require (totalBorrow == 0, "Total borrow is not zero");
@@ -273,6 +351,12 @@ contract HoldefiSettings is HoldefiOwnable {
 		emit MarketExistenceChanged(market, false);
 	}
 
+	/// @notice Add a new asset as a collateral
+	/// @dev Can only be called by the owner
+	/// @param collateral Address of the new collateral
+	/// @param valueToLoanRate ValueToLoanRate of the new collateral
+	/// @param penaltyRate PenaltyRate of the new collateral
+	/// @param bonusRate BonusRate of the new collateral
 	function addCollateral (
 		address collateral,
 		uint256 valueToLoanRate,
@@ -294,16 +378,19 @@ contract HoldefiSettings is HoldefiOwnable {
 		activateCollateralInternal(collateral);
 	}
 
+	/// @notice Activate the market
 	function activateMarketInternal (address market) internal {
 		marketAssets[market].isActive = true;
 		emit MarketActivationChanged(market, true);
 	}
 
+	/// @notice Activate the collateral
 	function activateCollateralInternal (address collateral) internal {
 		collateralAssets[collateral].isActive = true;
 		emit CollateralActivationChanged(collateral, true);
 	}
 
+	/// @notice Set borrow rate operation
 	function setBorrowRateInternal (address market, uint256 newBorrowRate) internal {
 		require (newBorrowRate <= maxBorrowRate, "Rate should be less than max");
 		uint256 currentTime = block.timestamp;
@@ -326,6 +413,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		marketAssets[market].borrowRateUpdateTime = currentTime;
 	}
 
+	/// @notice Set suppliers share rate operation
 	function setSuppliersShareRateInternal (address market, uint256 newSuppliersShareRate) internal {
 		require (
 			newSuppliersShareRate >= minSuppliersShareRate && newSuppliersShareRate <= rateDecimals,
@@ -344,6 +432,7 @@ contract HoldefiSettings is HoldefiOwnable {
 					"Rate should be decreased less than max allowed"
 				);
 			}
+
 			holdefiContract.beforeChangeSupplyRate(market);
 		}
 
@@ -357,6 +446,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		marketAssets[market].suppliersShareRateUpdateTime = currentTime;
 	}
 
+	/// @notice Set value to loan rate operation
 	function setValueToLoanRateInternal (address collateral, uint256 newValueToLoanRate) internal {
 		require (
 			newValueToLoanRate <= maxValueToLoanRate &&
@@ -386,6 +476,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	    collateralAssets[collateral].VTLUpdateTime = currentTime;
 	}
 
+	/// @notice Set penalty rate operation
 	function setPenaltyRateInternal (address collateral, uint256 newPenaltyRate) internal {
 		require (
 			newPenaltyRate <= maxPenaltyRate &&
@@ -411,6 +502,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	    collateralAssets[collateral].penaltyUpdateTime = currentTime;
 	}
 
+	/// @notice Set Bonus rate operation
 	function setBonusRateInternal (address collateral, uint256 newBonusRate) internal {
 		require (
 			newBonusRate <= collateralAssets[collateral].penaltyRate && newBonusRate >= rateDecimals,

@@ -8,7 +8,11 @@ import "./HoldefiOwnable.sol";
 interface ERC20DecimalInterface {
     function decimals () external view returns(uint256 res);
 }
-
+/// @title HoldefiPrices contract
+/// @author Holdefi Team
+/// @notice This contract is for getting tokens price
+/// @dev This contract uses Chainlink Oracle to get the tokens price
+/// @dev The address of ETH asset considered as 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
 contract HoldefiPrices is HoldefiOwnable {
 
     using SafeMath for uint256;
@@ -24,16 +28,24 @@ contract HoldefiPrices is HoldefiOwnable {
    
     mapping(address => Asset) public assets;
 
+    /// @notice Event emitted when a new price aggregator is set for an asset
     event NewPriceAggregator(address indexed asset, uint256 decimals, address priceAggregator);
 
+	/// @notice Initializes ETH decimals
     constructor() public {
         assets[ethAddress].decimals = 18;
     }
 
+    /// @notice You cannot send ETH to this contract
     receive() payable external {
         revert();
     }
 
+    /// @notice Gets price of selected asset from Chainlink
+	/// @dev The ETH price is assumed to be 1
+	/// @param asset Address of the given asset
+    /// @return price Price of the given asset
+    /// @return priceDecimals Decimals of the given asset
     function getPrice(address asset) public view returns (uint256 price, uint256 priceDecimals) {
         if (asset == ethAddress){
             price = 1;
@@ -51,6 +63,10 @@ contract HoldefiPrices is HoldefiOwnable {
         }
     }
 
+    /// @notice Sets price aggregator for the given asset 
+	/// @param asset Address of the given asset
+    /// @param decimals Decimals of the given asset
+    /// @param priceContractAddress Address of asset's price aggregator
     function setPriceAggregator(address asset, uint256 decimals, AggregatorV3Interface priceContractAddress)
         external
         onlyOwner
@@ -67,6 +83,10 @@ contract HoldefiPrices is HoldefiOwnable {
         emit NewPriceAggregator(asset, decimals, address(priceContractAddress));
     }
 
+    /// @notice Calculates the given asset value based on the given amount 
+	/// @param asset Address of the given asset
+    /// @param amount Amount of the given asset
+    /// @return res Value calculated for asset based on the price and given amount
     function getAssetValueFromAmount(address asset, uint256 amount) external view returns (uint256 res) {
         uint256 decimalsDiff;
         uint256 decimalsScale;
@@ -85,6 +105,10 @@ contract HoldefiPrices is HoldefiOwnable {
         }   
     }
 
+    /// @notice Calculates the given amount based on the given asset value
+    /// @param asset Address of the given asset
+    /// @param value Value of the given asset
+    /// @return res Amount calculated for asset based on the price and given value
     function getAssetAmountFromValue(address asset, uint256 value) external view returns (uint256 res) {
         uint256 decimalsDiff;
         uint256 decimalsScale;
