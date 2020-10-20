@@ -104,6 +104,12 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 lastUpdateTime;
 	}
 
+	struct MarketData {
+		uint256 balance;
+		uint256 interest;
+		uint256 currentIndex; 
+	}
+
 	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
 	/// @notice All rates in this contract are scaled by rateDecimals
@@ -153,18 +159,30 @@ contract Holdefi is HoldefiPausableOwnable {
 		address indexed supplier,
 		address indexed market,
 		uint256 amount,
+		uint256 balance,
+		uint256 interest,
+		uint256 index,
 		uint16 referralCode
 	);
 
 	/// @notice Event emitted when a supply is withdrawn
-	event WithdrawSupply(address sender, address indexed supplier, address indexed market, uint256 amount);
+	event WithdrawSupply(
+		address sender,
+		address indexed supplier,
+		address indexed market,
+		uint256 amount,
+		uint256 balance,
+		uint256 interest,
+		uint256 index
+	);
 
 	/// @notice Event emitted when a collateral asset is deposited
 	event Collateralize(
 		address sender,
 		address indexed collateralizer,
 		address indexed collateral,
-		uint256 amount
+		uint256 amount,
+		uint256 balance
 	);
 
 	/// @notice Event emitted when a collateral is withdrawn
@@ -172,7 +190,8 @@ contract Holdefi is HoldefiPausableOwnable {
 		address sender,
 		address indexed collateralizer,
 		address indexed collateral,
-		uint256 amount
+		uint256 amount,
+		uint256 balance
 	);
 
 	/// @notice Event emitted when a market asset is borrowed
@@ -182,6 +201,9 @@ contract Holdefi is HoldefiPausableOwnable {
 		address indexed market,
 		address indexed collateral,
 		uint256 amount,
+		uint256 balance,
+		uint256 interest,
+		uint256 index,
 		uint16 referralCode
 	);
 
@@ -191,7 +213,10 @@ contract Holdefi is HoldefiPausableOwnable {
 		address indexed borrower,
 		address indexed market,
 		address indexed collateral,
-		uint256 amount
+		uint256 amount,
+		uint256 balance,
+		uint256 interest,
+		uint256 index
 	);
 
 	/// @notice Event emitted when the supply index is updated for a market asset
@@ -210,7 +235,12 @@ contract Holdefi is HoldefiPausableOwnable {
 	);
 
 	/// @notice Event emitted when a liquidated collateral is purchased in exchange for the specified market
-	event BuyLiquidatedCollateral(address indexed market, address indexed collateral, uint256 marketAmount);
+	event BuyLiquidatedCollateral(
+		address indexed market,
+		address indexed collateral,
+		uint256 marketAmount,
+		uint256 collateralAmount
+	);
 
 	/// @notice Event emitted when HoldefiPrices contract is changed
 	event HoldefiPricesContractChanged(address newAddress, address oldAddress);
@@ -442,9 +472,8 @@ contract Holdefi is HoldefiPausableOwnable {
 		view
 		returns (uint256 totalBorrowValue)
 	{
+		MarketData memory borrowData;
 		address market;
-		uint256 balance;
-		uint256 interest;
 		uint256 totalDebt;
 		uint256 assetValue;
 		
@@ -453,8 +482,8 @@ contract Holdefi is HoldefiPausableOwnable {
 		for (uint256 i = 0 ; i < marketsList.length ; i++) {
 			market = marketsList[i];
 			
-			(balance, interest,) = getAccountBorrow(account, market, collateral);
-			totalDebt = balance.add(interest);
+			(borrowData.balance, borrowData.interest,) = getAccountBorrow(account, market, collateral);
+			totalDebt = borrowData.balance.add(borrowData.interest);
 
 			assetValue = holdefiPrices.getAssetValueFromAmount(market, totalDebt);
 			totalBorrowValue = totalBorrowValue.add(assetValue);
@@ -484,8 +513,9 @@ contract Holdefi is HoldefiPausableOwnable {
 		);
 		
 		reserve = 0;
-		if (collateralAssets[collateral].totalLiquidatedCollateral > liquidatedCollateralNeeded) {
-			reserve = collateralAssets[collateral].totalLiquidatedCollateral.sub(liquidatedCollateralNeeded);
+		uint256 totalLiquidatedCollateral = collateralAssets[collateral].totalLiquidatedCollateral;
+		if (totalLiquidatedCollateral > liquidatedCollateralNeeded) {
+			reserve = totalLiquidatedCollateral.sub(liquidatedCollateralNeeded);
 		}
 	}
 
@@ -617,7 +647,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	/// @notice Deposit ERC20 asset for supplying
 	/// @param market Address of the given market
-	/// @param amount The amount of assat supplier supplies
+	/// @param amount The amount of asset supplier supplies
 	/// @param referralCode A unique code used as an identifier of referrer
 	function supply(address market, uint256 amount, uint16 referralCode)
 		external
@@ -636,7 +666,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Sender deposits ERC20 asset belonging to the supplier
 	/// @param account Address of the supplier
 	/// @param market Address of the given market
-	/// @param amount The amount of assat supplier supplies
+	/// @param amount The amount of asset supplier supplies
 	/// @param referralCode A unique code used as an identifier of referrer
 	function supplyBehalf(address account, address market, uint256 amount, uint16 referralCode)
 		external
@@ -646,6 +676,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Sender deposits ETH belonging to the supplier
+	/// @notice msg.value The amount of ETH sender deposits belonging to the supplier
 	/// @param account Address of the supplier
 	/// @param referralCode A unique code used as an identifier of referrer
 	function supplyBehalf(address account, uint16 referralCode) 
@@ -676,23 +707,23 @@ contract Holdefi is HoldefiPausableOwnable {
 		withdrawSupplyInternal(msg.sender, market, amount);
 	}
 
-	/// @notice Sender withdraw supply belonging to the supplier
+	/// @notice Sender withdraws supply belonging to the supplier
 	/// @param account Address of the supplier
 	/// @param market Address of the given market
 	/// @param amount The amount will be withdrawn from the market
 	function withdrawSupplyBehalf(address account, address market, uint256 amount) external {
+		uint256 allowance = supplies[account][market].allowance[msg.sender];
 		require(
-			amount <= supplies[account][market].allowance[msg.sender], 
+			amount <= allowance, 
 			"Withdraw not allowed"
 		);
-		supplies[account][market].allowance[msg.sender] = 
-			supplies[account][market].allowance[msg.sender].sub(amount);
+		supplies[account][market].allowance[msg.sender] = allowance.sub(amount);
 		withdrawSupplyInternal(account, market, amount);
 	}
 
 	/// @notice Deposit ERC20 asset as a collateral
 	/// @param collateral Address of the given collateral
-	/// @param amount The amount will be collateralize
+	/// @param amount The amount will be collateralized
 	function collateralize (address collateral, uint256 amount)
 		external
 		isNotETHAddress(collateral)
@@ -701,7 +732,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Deposit ETH as a collateral
-	/// @notice msg.value The amount of ETH will be collateralize
+	/// @notice msg.value The amount of ETH will be collateralized
 	function collateralize () external payable {
 		collateralizeInternal(msg.sender, ethAddress, msg.value);
 	}
@@ -709,7 +740,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Sender deposits ERC20 asset as a collateral belonging to the user
 	/// @param account Address of the user
 	/// @param collateral Address of the given collateral
-	/// @param amount The amount will be collateralize
+	/// @param amount The amount will be collateralized
 	function collateralizeBehalf (address account, address collateral, uint256 amount)
 		external
 		isNotETHAddress(collateral)
@@ -718,6 +749,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Sender deposits ETH as a collateral belonging to the user
+	/// @notice msg.value The amount of ETH Sender deposits as a collateral belonging to the user
 	/// @param account Address of the user
 	function collateralizeBehalf (address account) external payable {
 		collateralizeInternal(account, ethAddress, msg.value);
@@ -744,19 +776,19 @@ contract Holdefi is HoldefiPausableOwnable {
 		withdrawCollateralInternal(msg.sender, collateral, amount);
 	}
 
-	/// @notice Sender withdraw a collateral belonging to the user
+	/// @notice Sender withdraws a collateral belonging to the user
 	/// @param account Address of the user
 	/// @param collateral Address of the given collateral
 	/// @param amount The amount will be withdrawn from the collateral
 	function withdrawCollateralBehalf (address account, address collateral, uint256 amount)
 		external
 	{
+		uint256 allowance = collaterals[account][collateral].allowance[msg.sender];
 		require(
-			amount <= collaterals[account][collateral].allowance[msg.sender],
+			amount <= allowance,
 			"Withdraw not allowed"
 		);
-		collaterals[account][collateral].allowance[msg.sender] =
-			collaterals[account][collateral].allowance[msg.sender].sub(amount);
+		collaterals[account][collateral].allowance[msg.sender] = allowance.sub(amount);
 		withdrawCollateralInternal(account, collateral, amount);
 	}
 
@@ -784,7 +816,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		borrowInternal(msg.sender, market, collateral, amount, referralCode);
 	}
 
-	/// @notice Sender borrow an asset belonging to the borrower
+	/// @notice Sender borrows an asset belonging to the borrower
 	/// @param account Address of the borrower
 	/// @param market Address of the given market
 	/// @param collateral Address of the given collateral
@@ -793,12 +825,12 @@ contract Holdefi is HoldefiPausableOwnable {
 	function borrowBehalf (address account, address market, address collateral, uint256 amount, uint16 referralCode)
 		external
 	{
+		uint256 allowance = borrows[account][collateral][market].allowance[msg.sender];
 		require(
-			amount <= borrows[account][collateral][market].allowance[msg.sender],
+			amount <= allowance,
 			"Withdraw not allowed"
 		);
-		borrows[account][collateral][market].allowance[msg.sender] =
-			borrows[account][collateral][market].allowance[msg.sender].sub(amount);
+		borrows[account][collateral][market].allowance[msg.sender] = allowance.sub(amount);
 		borrowInternal(account, market, collateral, amount, referralCode);
 	}
 
@@ -814,6 +846,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Repay an ETH based on a given collateral
+	/// @notice msg.value The amount of ETH will be repaid
 	/// @param collateral Address of the given collateral
 	function repayBorrow (address collateral) external payable {		
 		repayBorrowInternal(msg.sender, ethAddress, collateral, msg.value);
@@ -832,6 +865,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Sender repays an ETH based on a given collateral belonging to the borrower
+	/// @notice msg.value The amount of ETH sender repays belonging to the borrower
 	/// @param account Address of the borrower
 	/// @param collateral Address of the given collateral
 	function repayBorrowBehalf (address account, address collateral)
@@ -849,15 +883,17 @@ contract Holdefi is HoldefiPausableOwnable {
 		external
 		whenNotPaused("liquidateBorrowerCollateral")
 	{
-		(uint256 borrowBalance, uint256 borrowInterest,) = getAccountBorrow(borrower, market, collateral);
-		require(borrowBalance > 0, "User should have debt");
+		MarketData memory borrowData;
+		(borrowData.balance, borrowData.interest,) = getAccountBorrow(borrower, market, collateral);
+		require(borrowData.balance > 0, "User should have debt");
 
-		(,uint256 timeSinceLastActivity,,, bool underCollateral) = getAccountCollateral(borrower, collateral);
+		(uint256 collateralBalance, uint256 timeSinceLastActivity,,, bool underCollateral) = 
+			getAccountCollateral(borrower, collateral);
 		require (underCollateral || (timeSinceLastActivity > secondsPerYear),
 			"User should be under collateral or time is over"
 		);
 
-		uint256 totalBorrowedBalance = borrowBalance.add(borrowInterest);
+		uint256 totalBorrowedBalance = borrowData.balance.add(borrowData.interest);
 		uint256 totalBorrowedBalanceValue = holdefiPrices.getAssetValueFromAmount(market, totalBorrowedBalance);
 		
 		uint256 liquidatedCollateralValue = totalBorrowedBalanceValue
@@ -867,12 +903,11 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 liquidatedCollateral =
 			holdefiPrices.getAssetAmountFromValue(collateral, liquidatedCollateralValue);
 
-		if (liquidatedCollateral > collaterals[borrower][collateral].balance) {
-			liquidatedCollateral = collaterals[borrower][collateral].balance;
+		if (liquidatedCollateral > collateralBalance) {
+			liquidatedCollateral = collateralBalance;
 		}
 
-		collaterals[borrower][collateral].balance =
-			collaterals[borrower][collateral].balance.sub(liquidatedCollateral);
+		collaterals[borrower][collateral].balance = collateralBalance.sub(liquidatedCollateral);
 		collateralAssets[collateral].totalCollateral =
 			collateralAssets[collateral].totalCollateral.sub(liquidatedCollateral);
 		collateralAssets[collateral].totalLiquidatedCollateral =
@@ -880,7 +915,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		delete borrows[borrower][collateral][market];
 		beforeChangeSupplyRate(market);
-		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(borrowBalance);
+		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(borrowData.balance);
 		marketDebt[collateral][market] = marketDebt[collateral][market].add(totalBorrowedBalance);
 
 		emit CollateralLiquidated(borrower, market, collateral, totalBorrowedBalance, liquidatedCollateral);	
@@ -927,7 +962,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 maxWithdraw = getLiquidationReserve(collateral);
 		uint256 transferAmount = amount;
 		
-		if (amount > maxWithdraw){
+		if (transferAmount > maxWithdraw){
 			transferAmount = maxWithdraw;
 		}
 
@@ -949,7 +984,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Deposit ETH as promotion reserve
-	/// @notice msg.value The amount that will be deposited
+	/// @notice msg.value The amount of ETH that will be deposited
 	function depositPromotionReserve () external payable {
 		depositPromotionReserveInternal(ethAddress, msg.value);
 	}
@@ -984,16 +1019,19 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @param market Address of the given market
 	function reserveSettlement (address market) external {
 		require(msg.sender == address(holdefiSettings), "Sender should be Holdefi Settings contract");
-		require(marketAssets[market].promotionReserveScaled > marketAssets[market].promotionDebtScaled, "Not enough promotion reserve");
+
+		uint256 promotionReserve = marketAssets[market].promotionReserveScaled;
+		uint256 promotionDebt = marketAssets[market].promotionDebtScaled;
+		require(promotionReserve > promotionDebt, "Not enough promotion reserve");
 		
-		marketAssets[market].promotionReserveScaled = 
-			marketAssets[market].promotionReserveScaled.sub(marketAssets[market].promotionDebtScaled);
+		promotionReserve = promotionReserve.sub(promotionDebt);
+		marketAssets[market].promotionReserveScaled = promotionReserve;
 		marketAssets[market].promotionDebtScaled = 0;
 
 		marketAssets[market].promotionReserveLastUpdateTime = block.timestamp;
 		marketAssets[market].promotionDebtLastUpdateTime = block.timestamp;
 
-		emit PromotionReserveUpdated(market, marketAssets[market].promotionReserveScaled);
+		emit PromotionReserveUpdated(market, promotionReserve);
 		emit PromotionDebtUpdated(market, 0);
 	}
 
@@ -1042,7 +1080,7 @@ contract Holdefi is HoldefiPausableOwnable {
 
       		emit PromotionDebtUpdated(market, debtScaled);
     	}
-    	if (marketAssets[market].promotionReserveScaled <= marketAssets[market].promotionDebtScaled) {
+    	if (marketAssets[market].promotionReserveScaled <= debtScaled) {
       		holdefiSettings.resetPromotionRate(market);
     	}
   	}
@@ -1076,17 +1114,28 @@ contract Holdefi is HoldefiPausableOwnable {
 			transferToHoldefi(address(this), market, amount);
 		}
 
-		(uint256 balance, uint256 interest, uint256 currentSupplyIndex) = getAccountSupply(account, market);
+		MarketData memory supplyData;
+		(supplyData.balance, supplyData.interest, supplyData.currentIndex) = getAccountSupply(account, market);
 		
-		supplies[account][market].accumulatedInterest = interest;
-		supplies[account][market].balance = balance.add(amount);
-		supplies[account][market].lastInterestIndex = currentSupplyIndex;
+		supplyData.balance = supplyData.balance.add(amount);
+		supplies[account][market].balance = supplyData.balance;
+		supplies[account][market].accumulatedInterest = supplyData.interest;
+		supplies[account][market].lastInterestIndex = supplyData.currentIndex;
 
 		beforeChangeSupplyRate(market);
 		
 		marketAssets[market].totalSupply = marketAssets[market].totalSupply.add(amount);
 
-		emit Supply(msg.sender, account, market, amount, referralCode);
+		emit Supply(
+			msg.sender,
+			account,
+			market,
+			amount,
+			supplyData.balance,
+			supplyData.interest,
+			supplyData.currentIndex,
+			referralCode
+		);
 	}
 
 	/// @notice Perform withdraw supply operation
@@ -1094,8 +1143,9 @@ contract Holdefi is HoldefiPausableOwnable {
 		internal
 		whenNotPaused("withdrawSupply")
 	{
-		(uint256 balance, uint256 interest, uint256 currentSupplyIndex) = getAccountSupply(account, market);
-		uint256 totalSuppliedBalance = balance.add(interest);
+		MarketData memory supplyData;
+		(supplyData.balance, supplyData.interest, supplyData.currentIndex) = getAccountSupply(account, market);
+		uint256 totalSuppliedBalance = supplyData.balance.add(supplyData.interest);
 		require (totalSuppliedBalance != 0, "Total balance should not be zero");
 
 		uint256 transferAmount = amount;
@@ -1104,15 +1154,18 @@ contract Holdefi is HoldefiPausableOwnable {
 		}
 
 		uint256 remaining = 0;
-		if (transferAmount <= interest) {
-			supplies[account][market].accumulatedInterest = interest.sub(transferAmount);
+		if (transferAmount <= supplyData.interest) {
+			supplyData.interest = supplyData.interest.sub(transferAmount);
 		}
 		else {
-			remaining = transferAmount.sub(interest);
-			supplies[account][market].accumulatedInterest = 0;
-			supplies[account][market].balance = balance.sub(remaining);
+			remaining = transferAmount.sub(supplyData.interest);
+			supplyData.interest = 0;
+			supplyData.balance = supplyData.balance.sub(remaining);
 		}
-		supplies[account][market].lastInterestIndex = currentSupplyIndex;
+
+		supplies[account][market].balance = supplyData.balance;
+		supplies[account][market].accumulatedInterest = supplyData.interest;
+		supplies[account][market].lastInterestIndex = supplyData.currentIndex;
 
 		beforeChangeSupplyRate(market);
 		
@@ -1120,7 +1173,15 @@ contract Holdefi is HoldefiPausableOwnable {
 		
 		transferFromHoldefi(msg.sender, market, transferAmount);
 	
-		emit WithdrawSupply(msg.sender, account, market, transferAmount);
+		emit WithdrawSupply(
+			msg.sender,
+			account,
+			market,
+			transferAmount,
+			supplyData.balance,
+			supplyData.interest,
+			supplyData.currentIndex
+		);
 	}
 
 	/// @notice Perform collateralize operation
@@ -1136,12 +1197,13 @@ contract Holdefi is HoldefiPausableOwnable {
 			transferFromHoldefi(address(holdefiCollaterals), collateral, amount);
 		}
 
-		collaterals[account][collateral].balance = collaterals[account][collateral].balance.add(amount);
+		uint256 balance = collaterals[account][collateral].balance.add(amount);
+		collaterals[account][collateral].balance = balance;
 		collaterals[account][collateral].lastUpdateTime = block.timestamp;
 
 		collateralAssets[collateral].totalCollateral = collateralAssets[collateral].totalCollateral.add(amount);	
 		
-		emit Collateralize(msg.sender, account, collateral, amount);
+		emit Collateralize(msg.sender, account, collateral, amount, balance);
 	}
 
 	/// @notice Perform withdraw collateral operation
@@ -1166,8 +1228,8 @@ contract Holdefi is HoldefiPausableOwnable {
 		if (transferAmount > maxWithdraw){
 			transferAmount = maxWithdraw;
 		}
-
-		collaterals[account][collateral].balance = balance.sub(transferAmount);
+		balance = balance.sub(transferAmount);
+		collaterals[account][collateral].balance = balance;
 		collaterals[account][collateral].lastUpdateTime = block.timestamp;
 
 		collateralAssets[collateral].totalCollateral =
@@ -1175,17 +1237,11 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		holdefiCollaterals.withdraw(collateral, msg.sender, transferAmount);
 
-		emit WithdrawCollateral(msg.sender, account, collateral, transferAmount);
+		emit WithdrawCollateral(msg.sender, account, collateral, transferAmount, balance);
 	}
 
 	/// @notice Perform borrow operation
-	function borrowInternal (
-		address account,
-		address market,
-		address collateral,
-		uint256 amount,
-		uint16 referralCode
-	)
+	function borrowInternal (address account, address market, address collateral, uint256 amount, uint16 referralCode)
 		internal
 		whenNotPaused("borrow")
 		marketIsActive(market)
@@ -1196,19 +1252,20 @@ contract Holdefi is HoldefiPausableOwnable {
 			"Amount should be less than cash"
 		);
 
-		(,, uint256 borrowPowerValue,,) = getAccountCollateral(account, collateral);	
+		(,, uint256 borrowPowerValue,,) = getAccountCollateral(account, collateral);
 		uint256 assetToBorrowValue = holdefiPrices.getAssetValueFromAmount(market, amount);
 		require (
 			borrowPowerValue >= assetToBorrowValue,
 			"Borrow power should be more than new borrow value"
 		);
 
-		(,uint256 interest, uint256 currentBorrowIndex) = getAccountBorrow(account, market, collateral);
+		MarketData memory borrowData;
+		(borrowData.balance, borrowData.interest, borrowData.currentIndex) = getAccountBorrow(account, market, collateral);
 		
-		borrows[account][collateral][market].accumulatedInterest = interest;
-		borrows[account][collateral][market].balance =
-			borrows[account][collateral][market].balance.add(amount);
-		borrows[account][collateral][market].lastInterestIndex = currentBorrowIndex;
+		borrowData.balance = borrowData.balance.add(amount);
+		borrows[account][collateral][market].balance = borrowData.balance;
+		borrows[account][collateral][market].accumulatedInterest = borrowData.interest;
+		borrows[account][collateral][market].lastInterestIndex = borrowData.currentIndex;
 		collaterals[account][collateral].lastUpdateTime = block.timestamp;
 
 		beforeChangeSupplyRate(market);
@@ -1217,7 +1274,17 @@ contract Holdefi is HoldefiPausableOwnable {
 
 		transferFromHoldefi(msg.sender, market, amount);
 
-		emit Borrow(msg.sender, account, market, collateral, amount, referralCode);
+		emit Borrow(
+			msg.sender, 
+			account,
+			market,
+			collateral,
+			amount,
+			borrowData.balance,
+			borrowData.interest,
+			borrowData.currentIndex,
+			referralCode
+		);
 	}
 
 	/// @notice Perform repay borrow operation
@@ -1225,10 +1292,11 @@ contract Holdefi is HoldefiPausableOwnable {
 		internal
 		whenNotPaused("repayBorrow")
 	{
-		(uint256 balance, uint256 interest, uint256 currentBorrowIndex) =
+		MarketData memory borrowData;
+		(borrowData.balance, borrowData.interest, borrowData.currentIndex) =
 			getAccountBorrow(account, market, collateral);
 
-		uint256 totalBorrowedBalance = balance.add(interest);
+		uint256 totalBorrowedBalance = borrowData.balance.add(borrowData.interest);
 		require (totalBorrowedBalance != 0, "Total balance should not be zero");
 
 		uint256 transferAmount = amount;
@@ -1245,22 +1313,33 @@ contract Holdefi is HoldefiPausableOwnable {
 		}
 
 		uint256 remaining = 0;
-		if (transferAmount <= interest) {
-			borrows[account][collateral][market].accumulatedInterest = interest.sub(transferAmount);
+		if (transferAmount <= borrowData.interest) {
+			borrowData.interest = borrowData.interest.sub(transferAmount);
 		}
 		else {
-			remaining = transferAmount.sub(interest);
-			borrows[account][collateral][market].accumulatedInterest = 0;
-			borrows[account][collateral][market].balance = balance.sub(remaining);
+			remaining = transferAmount.sub(borrowData.interest);
+			borrowData.interest = 0;
+			borrowData.balance = borrowData.balance.sub(remaining);
 		}
-		borrows[account][collateral][market].lastInterestIndex = currentBorrowIndex;
+		borrows[account][collateral][market].balance = borrowData.balance;
+		borrows[account][collateral][market].accumulatedInterest = borrowData.interest;
+		borrows[account][collateral][market].lastInterestIndex = borrowData.currentIndex;
 		collaterals[account][collateral].lastUpdateTime = block.timestamp;
 
 		beforeChangeSupplyRate(market);
 		
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(remaining);	
 
-		emit RepayBorrow (msg.sender, account, market, collateral, transferAmount);
+		emit RepayBorrow (
+			msg.sender,
+			account,
+			market,
+			collateral,
+			transferAmount,
+			borrowData.balance,
+			borrowData.interest,
+			borrowData.currentIndex
+		);
 	}
 
 	/// @notice Perform buy liquidated collateral operation
@@ -1268,14 +1347,17 @@ contract Holdefi is HoldefiPausableOwnable {
 		internal
 		whenNotPaused("buyLiquidatedCollateral")
 	{
-		require (marketAmount <= marketDebt[collateral][market],
+		uint256 debt = marketDebt[collateral][market];
+		require (marketAmount <= debt,
 			"Amount should be less than total liquidated assets"
 		);
 
 		uint256 collateralAmountWithDiscount =
 			getDiscountedCollateralAmount(market, collateral, marketAmount);
+
+		uint256 totalLiquidatedCollateral = collateralAssets[collateral].totalLiquidatedCollateral;
 		require (
-			collateralAmountWithDiscount <= collateralAssets[collateral].totalLiquidatedCollateral,
+			collateralAmountWithDiscount <= totalLiquidatedCollateral,
 			"Collateral amount with discount should be less than total liquidated assets"
 		);
 
@@ -1283,13 +1365,12 @@ contract Holdefi is HoldefiPausableOwnable {
 			transferToHoldefi(address(this), market, marketAmount);
 		}
 
-		collateralAssets[collateral].totalLiquidatedCollateral =
-			collateralAssets[collateral].totalLiquidatedCollateral.sub(collateralAmountWithDiscount);
-		marketDebt[collateral][market] = marketDebt[collateral][market].sub(marketAmount);
+		collateralAssets[collateral].totalLiquidatedCollateral = totalLiquidatedCollateral.sub(collateralAmountWithDiscount);
+		marketDebt[collateral][market] = debt.sub(marketAmount);
 
 		holdefiCollaterals.withdraw(collateral, msg.sender, collateralAmountWithDiscount);
 
-		emit BuyLiquidatedCollateral(market, collateral, marketAmount);
+		emit BuyLiquidatedCollateral(market, collateral, marketAmount, collateralAmountWithDiscount);
 	}
 
 	/// @notice Perform deposit promotion reserve operation
