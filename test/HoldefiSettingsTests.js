@@ -114,12 +114,24 @@ contract('HoldefiSettings', function([owner, user1, user2, user3, user4, user5, 
         beforeEach(async () =>{
             await initializeContracts(owner);
             await HoldefiSettings.addMarket(SampleToken1.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8));
+            await HoldefiSettings.addMarket(SampleToken2.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8));
+            await HoldefiSettings.addMarket(SampleToken3.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.8));
         })
 
         it('Remove market by owner',async () =>{
             await HoldefiSettings.removeMarket(SampleToken1.address);                                   
             let marketFeatures = await HoldefiSettings.marketAssets(SampleToken1.address);  
             assert.isFalse(marketFeatures.isActive);
+        })
+
+        it('Length should be decreased after Removing market',async () =>{
+            let marketList = await HoldefiSettings.getMarketsList();
+            lengthBefore = marketList.length;
+            await HoldefiSettings.removeMarket(SampleToken1.address);  
+            let marketList2 = await HoldefiSettings.getMarketsList();
+            lengthAfter = marketList2.length;    
+                            
+            assert.equal(lengthAfter, lengthBefore-1);
         })
 
         it('Fail if market removed by other accounts',async () =>{

@@ -3,6 +3,7 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./HoldefiOwnable.sol";
 
 /// @notice File: contracts/Holdefi.sol
@@ -65,6 +66,8 @@ contract HoldefiSettings is HoldefiOwnable {
 	}
 
 	uint256 constant public rateDecimals = 10 ** 4;
+
+	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
 	uint256 constant public periodBetweenUpdates = 864000;      	// seconds per ten days
 
@@ -144,6 +147,7 @@ contract HoldefiSettings is HoldefiOwnable {
         require (collateralAssets[collateral].isExist, "The collateral is not exist");
         _;
     }
+
 
 	/// @notice you cannot send ETH to this contract
     receive() external payable {
@@ -320,7 +324,11 @@ contract HoldefiSettings is HoldefiOwnable {
 	{
 		require (!marketAssets[market].isExist, "The market is exist");
 		require (marketsList.length < maxListsLength, "Market list is full");
-		
+
+		if (market != ethAddress) {
+			IERC20(market);
+		}
+
 		marketsList.push(market);
 		marketAssets[market].isExist = true;
 		emit MarketExistenceChanged(market, true);
@@ -340,13 +348,22 @@ contract HoldefiSettings is HoldefiOwnable {
 		
 		holdefiContract.beforeChangeBorrowRate(market);
 
-		for (uint256 i = 0; i < marketsList.length ; i++) {
-			if (marketsList[i] == market){
-				delete marketsList[i];
-				break;
+		uint256 i;
+		uint256 index;
+		uint256 marketListLength = marketsList.length;
+		for (i = 0 ; i < marketListLength ; i++) {
+			if (marketsList[i] == market) {
+				index = i;
 			}
 		}
 
+		if (index != marketListLength-1) {
+			for (i = index ; i < marketListLength-1 ; i++) {
+				marketsList[i] = marketsList[i+1];
+			}
+		}
+
+		marketsList.pop();
 		delete marketAssets[market];
 		emit MarketExistenceChanged(market, false);
 	}
@@ -367,6 +384,10 @@ contract HoldefiSettings is HoldefiOwnable {
 		onlyOwner
 	{
 		require (!collateralAssets[collateral].isExist, "The collateral is exist");
+
+		if (collateral != ethAddress) {
+			IERC20(collateral);
+		}
 
 		collateralAssets[collateral].isExist = true;
 		emit CollateralExistenceChanged(collateral, true);
