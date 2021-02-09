@@ -19,5 +19,5 @@ This contract is for Holdefi settings implementation such as adding new markets 
 ## License ##
 The Holdefi protocol in under SPDX License: UNLICENSED
 ## Discussion  ##
-For more info contact with contact@holdefi.com
+For more info contact with business@holdefi.com
 
