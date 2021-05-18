@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 
 /// @title HoldefiCollaterals
@@ -12,6 +12,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// 	CE01: Sender should be Holdefi contract
 /// 	CE02: Cannot transfer
 contract HoldefiCollaterals {
+
+	using SafeERC20 for IERC20;
 
 	address constant private ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
@@ -42,13 +44,12 @@ contract HoldefiCollaterals {
 	{
 		bool success = false;
 		if (collateral == ethAddress){
-			(success, ) = recipient.call{value:amount}("");
+			(bool success, ) = recipient.call{value:amount}("");
+			require (success, "CE02");
 		}
 		else {
 			IERC20 token = IERC20(collateral);
-			success = token.transfer(recipient, amount);
+			token.safeTransfer(recipient, amount);
 		}
-		require (success, "CE02");
 	}
-
 }
