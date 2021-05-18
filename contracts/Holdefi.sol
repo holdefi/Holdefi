@@ -1348,16 +1348,16 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform deposit liquidation reserve operation
 	function depositLiquidationReserveInternal (address collateral, uint256 amount)
 		internal
-		collateralIsActive(ethAddress)
+		collateralIsActive(collateral)
 	{
 		transferFromSender(address(holdefiCollaterals), collateral, amount);
 		if (collateral == ethAddress) {
 			transferFromHoldefi(address(holdefiCollaterals), collateral, amount);
 		}
 		
-		collateralAssets[ethAddress].totalLiquidatedCollateral =
-			collateralAssets[ethAddress].totalLiquidatedCollateral.add(msg.value);
+		collateralAssets[collateral].totalLiquidatedCollateral =
+			collateralAssets[collateral].totalLiquidatedCollateral.add(amount);
 		
-		emit LiquidationReserveDeposited(ethAddress, msg.value);
+		emit LiquidationReserveDeposited(collateral, amount);
 	}
 }
