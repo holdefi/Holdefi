@@ -82,7 +82,7 @@ contract HoldefiPrices is HoldefiOwnable {
         catch {
             assets[asset].decimals = decimals;
         }
-        emit NewPriceAggregator(asset, decimals, address(priceContractAddress));
+        emit NewPriceAggregator(asset, assets[asset].decimals, address(priceContractAddress));
     }
 
     /// @notice Calculates the given asset value based on the given amount 

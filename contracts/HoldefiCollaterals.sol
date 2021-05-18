@@ -42,7 +42,6 @@ contract HoldefiCollaterals {
 		external
 		onlyHoldefiContract
 	{
-		bool success = false;
 		if (collateral == ethAddress){
 			(bool success, ) = recipient.call{value:amount}("");
 			require (success, "CE02");
