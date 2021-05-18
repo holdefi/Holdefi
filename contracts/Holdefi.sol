@@ -194,7 +194,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 index
 	);
 
-	/// @notice Event emitted when a collateral asset is deposited
+	/// @notice Event emitted when the collateral asset is deposited
 	event Collateralize(
 		address sender,
 		address indexed collateralizer,
@@ -203,7 +203,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 balance
 	);
 
-	/// @notice Event emitted when a collateral is withdrawn
+	/// @notice Event emitted when the collateral is withdrawn
 	event WithdrawCollateral(
 		address sender,
 		address indexed collateralizer,
@@ -243,7 +243,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Event emitted when the borrow index is updated for a market asset
 	event UpdateBorrowIndex(address indexed market, uint256 newBorrowIndex);
 
-	/// @notice Event emitted when a collateral is liquidated
+	/// @notice Event emitted when the collateral is liquidated
 	event CollateralLiquidated(
 		address indexed borrower,
 		address indexed market,
@@ -668,7 +668,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Deposit ERC20 asset for supplying
 	/// @param market Address of the given market
 	/// @param amount The amount of asset supplier supplies
-	/// @param referralCode A unique code used as an identifier of referrer
+	/// @param referralCode A unique code used as an identifier of the referrer
 	function supply(address market, uint256 amount, uint16 referralCode)
 		external
 		isNotETHAddress(market)
@@ -678,16 +678,16 @@ contract Holdefi is HoldefiPausableOwnable {
 
 	/// @notice Deposit ETH for supplying
 	/// @notice msg.value The amount of asset supplier supplies
-	/// @param referralCode A unique code used as an identifier of referrer
+	/// @param referralCode A unique code used as an identifier of the referrer
 	function supply(uint16 referralCode) external payable {		
 		supplyInternal(msg.sender, ethAddress, msg.value, referralCode);
 	}
 
-	/// @notice Sender deposits ERC20 asset belonging to the supplier
+	/// @notice Sender supplies ERC20 asset belonging to the supplier
 	/// @param account Address of the supplier
 	/// @param market Address of the given market
-	/// @param amount The amount of asset supplier supplies
-	/// @param referralCode A unique code used as an identifier of referrer
+	/// @param amount The amount of asset sender deposits
+	/// @param referralCode A unique code used as an identifier of the referrer
 	function supplyBehalf(address account, address market, uint256 amount, uint16 referralCode)
 		external
 		isNotETHAddress(market)
@@ -695,10 +695,10 @@ contract Holdefi is HoldefiPausableOwnable {
 		supplyInternal(account, market, amount, referralCode);
 	}
 
-	/// @notice Sender deposits ETH belonging to the supplier
-	/// @notice msg.value The amount of ETH sender deposits belonging to the supplier
+	/// @notice Sender supplies ETH belonging to the supplier
+	/// @notice msg.value The amount of ETH sender deposits
 	/// @param account Address of the supplier
-	/// @param referralCode A unique code used as an identifier of referrer
+	/// @param referralCode A unique code used as an identifier of the referrer
 	function supplyBehalf(address account, uint16 referralCode) 
 		external
 		payable
@@ -706,10 +706,10 @@ contract Holdefi is HoldefiPausableOwnable {
 		supplyInternal(account, ethAddress, msg.value, referralCode);
 	}
 
-	/// @notice Sender approves of the withdarawl for the account in the market asset
-	/// @param account Address of the account allowed to withdrawn
+	/// @notice Sender approves the account to withdraw supply
+	/// @param account Address of the spender
 	/// @param market Address of the given market
-	/// @param amount The amount is allowed to withdrawn
+	/// @param amount The amount is allowed to be withdrawn
 	function approveWithdrawSupply(address account, address market, uint256 amount)
 		external
 		accountIsValid(account)
@@ -736,7 +736,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		withdrawSupplyInternal(account, market, amount);
 	}
 
-	/// @notice Deposit ERC20 asset as a collateral
+	/// @notice Deposit ERC20 asset as collateral
 	/// @param collateral Address of the given collateral
 	/// @param amount The amount will be collateralized
 	function collateralize (address collateral, uint256 amount)
@@ -746,16 +746,16 @@ contract Holdefi is HoldefiPausableOwnable {
 		collateralizeInternal(msg.sender, collateral, amount);
 	}
 
-	/// @notice Deposit ETH as a collateral
+	/// @notice Deposit ETH as collateral
 	/// @notice msg.value The amount of ETH will be collateralized
 	function collateralize () external payable {
 		collateralizeInternal(msg.sender, ethAddress, msg.value);
 	}
 
-	/// @notice Sender deposits ERC20 asset as a collateral belonging to the user
+	/// @notice Sender deposits ERC20 asset as collateral belonging to another user
 	/// @param account Address of the user
 	/// @param collateral Address of the given collateral
-	/// @param amount The amount will be collateralized
+	/// @param amount The amount of asset sender deposits
 	function collateralizeBehalf (address account, address collateral, uint256 amount)
 		external
 		isNotETHAddress(collateral)
@@ -763,17 +763,17 @@ contract Holdefi is HoldefiPausableOwnable {
 		collateralizeInternal(account, collateral, amount);
 	}
 
-	/// @notice Sender deposits ETH as a collateral belonging to the user
-	/// @notice msg.value The amount of ETH Sender deposits as a collateral belonging to the user
+	/// @notice Sender deposits ETH as collateral belonging to another user
+	/// @notice msg.value The amount of ETH sender deposits
 	/// @param account Address of the user
 	function collateralizeBehalf (address account) external payable {
 		collateralizeInternal(account, ethAddress, msg.value);
 	}
 
 	/// @notice Sender approves the account to withdraw the collateral
-	/// @param account Address is allowed to withdraw the collateral
+	/// @param account Address of the spender
 	/// @param collateral Address of the given collateral
-	/// @param amount The amount is allowed to withdrawn
+	/// @param amount The amount is allowed to be withdrawn
 	function approveWithdrawCollateral (address account, address collateral, uint256 amount)
 		external
 		accountIsValid(account)
@@ -782,7 +782,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		collaterals[msg.sender][collateral].allowance[account] = amount;
 	}
 
-	/// @notice Withdraw a collateral
+	/// @notice Withdraw the collateral
 	/// @param collateral Address of the given collateral
 	/// @param amount The amount will be withdrawn from the collateral
 	function withdrawCollateral (address collateral, uint256 amount)
@@ -791,7 +791,7 @@ contract Holdefi is HoldefiPausableOwnable {
 		withdrawCollateralInternal(msg.sender, collateral, amount);
 	}
 
-	/// @notice Sender withdraws a collateral belonging to the user
+	/// @notice Sender withdraws the collateral belonging to another user
 	/// @param account Address of the user
 	/// @param collateral Address of the given collateral
 	/// @param amount The amount will be withdrawn from the collateral
@@ -804,10 +804,10 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Sender approves the account to borrow a given market based on given collateral
-	/// @param account Address that is allowed to borrow the given market
+	/// @param account Address of the spender
 	/// @param market Address of the given market
 	/// @param collateral Address of the given collateral
-	/// @param amount The amount is allowed to withdrawn
+	/// @param amount The amount is allowed to be withdrawn
 	function approveBorrow (address account, address market, address collateral, uint256 amount)
 		external
 		accountIsValid(account)
@@ -820,7 +820,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @param market Address of the given market
 	/// @param collateral Address of the given collateral
 	/// @param amount The amount of the given market will be borrowed
-	/// @param referralCode A unique code used as an identifier of referrer
+	/// @param referralCode A unique code used as an identifier of the referrer
 	function borrow (address market, address collateral, uint256 amount, uint16 referralCode)
 		external
 	{
@@ -832,7 +832,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @param market Address of the given market
 	/// @param collateral Address of the given collateral
 	/// @param amount The amount will be borrowed
-	/// @param referralCode A unique code used as an identifier of referrer
+	/// @param referralCode A unique code used as an identifier of the referrer
 	function borrowBehalf (address account, address market, address collateral, uint256 amount, uint16 referralCode)
 		external
 	{
@@ -872,7 +872,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Sender repays an ETH based on a given collateral belonging to the borrower
-	/// @notice msg.value The amount of ETH sender repays belonging to the borrower
+	/// @notice msg.value The amount of ETH sender repays
 	/// @param account Address of the borrower
 	/// @param collateral Address of the given collateral
 	function repayBorrowBehalf (address account, address collateral)
