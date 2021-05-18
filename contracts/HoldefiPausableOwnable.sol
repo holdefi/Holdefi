@@ -122,7 +122,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
         }
     }
 
-    /// @notice Called by pausers to pause operations, returns to normal state for selected operations
+    /// @notice Called by pausers to unpause operations, returns to normal state for selected operations
     /// @param operations List of operation names
     function batchUnpause(string[] memory operations) external {
         for (uint256 i = 0 ; i < operations.length ; i++) {
