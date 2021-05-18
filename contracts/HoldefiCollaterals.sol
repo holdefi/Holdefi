@@ -8,9 +8,12 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// @author Holdefi Team
 /// @notice Collaterals is held by this contract
 /// @dev The address of ETH asset considered as 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+/// @dev Error codes description: 
+/// 	CE01: Sender should be Holdefi contract
+/// 	CE02: Cannot transfer
 contract HoldefiCollaterals {
 
-	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+	address constant private ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
 	address public holdefiContract;
 
@@ -21,7 +24,7 @@ contract HoldefiCollaterals {
 
 	/// @notice Modifier to check that only Holdefi contract interacts with the function
     modifier onlyHoldefiContract() {
-        require (msg.sender == holdefiContract, "Sender should be holdefi contract");
+        require (msg.sender == holdefiContract, "CE01");
         _;
     }
 
@@ -45,7 +48,7 @@ contract HoldefiCollaterals {
 			IERC20 token = IERC20(collateral);
 			success = token.transfer(recipient, amount);
 		}
-		require (success, "Cannot Transfer");
+		require (success, "CE02");
 	}
 
 }

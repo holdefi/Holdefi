@@ -8,9 +8,16 @@ import "./HoldefiOwnable.sol";
 /// @author Holdefi Team
 /// @notice Taking ideas from Open Zeppelin's Pausable contract
 /// @dev Base contract which allows children to implement an emergency stop mechanism.
+/// @dev Error codes description: 
+///     POE01: Sender should be the owner or the pauser
+///     POE02: Operation is paused
+///     POE03: Operation is unpaused
+///     POE04: Operation is not valid
+///     POE05: Duration is not in the allowed range
+///     POE06: Lists are not equal in length
 contract HoldefiPausableOwnable is HoldefiOwnable {
 
-    uint256 constant public maxPauseDuration = 2592000;     //seconds per month
+    uint256 constant private maxPauseDuration = 2592000;     //seconds per month
 
     struct Operation {
         bool isValid;
@@ -45,28 +52,28 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
 
     /// @dev Modifier to make a function callable only by owner or pauser
     modifier onlyPausers() {
-        require(msg.sender == owner || msg.sender == pauser , "Sender should be owner or pauser");
+        require(msg.sender == owner || msg.sender == pauser , "POE01");
         _;
     }
     
     /// @dev Modifier to make a function callable only when an operation is not paused
     /// @param operation Name of the operation
     modifier whenNotPaused(string memory operation) {
-        require(!isPaused(operation), "Operation is paused");
+        require(!isPaused(operation), "POE02");
         _;
     }
 
     /// @dev Modifier to make a function callable only when an operation is paused
     /// @param operation Name of the operation
     modifier whenPaused(string memory operation) {
-        require(isPaused(operation), "Operation is unpaused");
+        require(isPaused(operation), "POE03");
         _;
     }
 
     /// @dev Modifier to make a function callable only when an operation is valid
     /// @param operation Name of the operation
     modifier operationIsValid(string memory operation) {
-        require(paused[operation].isValid ,"Operation is not valid");
+        require(paused[operation].isValid ,"POE04");
         _;
     }
 
@@ -74,12 +81,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     /// @param operation Name of the operation
     /// @return res Pause status of a given operation
     function isPaused(string memory operation) public view returns (bool res) {
-        if (block.timestamp > paused[operation].pauseEndTime) {
-            res = false;
-        }
-        else {
-            res = true;
-        }
+        res = block.timestamp <= paused[operation].pauseEndTime;
     }
 
     /// @notice Called by pausers to pause an operation, triggers stopped state
@@ -91,7 +93,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
         operationIsValid(operation)
         whenNotPaused(operation)
     {
-        require (pauseDuration <= maxPauseDuration, "Duration not in range");
+        require (pauseDuration <= maxPauseDuration, "POE05");
         paused[operation].pauseEndTime = block.timestamp + pauseDuration;
         emit OperationPaused(operation, pauseDuration);
     }
@@ -112,7 +114,7 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     /// @param operations List of operation names
     /// @param pauseDurations List of durations specifying the pause time of each operation
     function batchPause(string[] memory operations, uint256[] memory pauseDurations) external {
-        require (operations.length == pauseDurations.length, "Lists are not equal in length");
+        require (operations.length == pauseDurations.length, "POE06");
         for (uint256 i = 0 ; i < operations.length ; i++) {
             pause(operations[i], pauseDurations[i]);
         }
@@ -131,7 +133,5 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
     function setPauser(address newPauser) external onlyOwner {
         emit PauserChanged(newPauser, pauser);
         pauser = newPauser;
-        
     }
-
 }

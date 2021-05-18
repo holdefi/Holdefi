@@ -33,6 +33,19 @@ interface HoldefiInterface {
 /// @title HoldefiSettings contract
 /// @author Holdefi Team
 /// @notice This contract is for Holdefi settings implementation
+/// @dev Error codes description: 
+/// 	SE01: Market is not exist
+/// 	SE02: Collateral is not exist
+/// 	SE03: Conflict with Holdefi contract
+/// 	SE04: The contract should be set once
+/// 	SE05: Rate should be in the allowed range
+/// 	SE06: Sender should be Holdefi contract
+/// 	SE07: Collateral is exist
+/// 	SE08: Market is exist
+/// 	SE09: Market list is full
+/// 	SE10: Total borrow is not zero
+/// 	SE11: Changing rate is not allowed at this time
+/// 	SE12: Changing rate should be less than Max allowed
 contract HoldefiSettings is HoldefiOwnable {
 
 	using SafeMath for uint256;
@@ -65,31 +78,31 @@ contract HoldefiSettings is HoldefiOwnable {
 		uint256 bonusRate;
 	}
 
-	uint256 constant public rateDecimals = 10 ** 4;
+	uint256 constant private rateDecimals = 10 ** 4;
 
-	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+	address constant private ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-	uint256 constant public periodBetweenUpdates = 604800;      	// seconds per week
+	uint256 constant private periodBetweenUpdates = 604800;      	// seconds per week
 
-	uint256 constant public maxBorrowRate = 4000;      				// 40%
+	uint256 constant private maxBorrowRate = 4000;      			// 40%
 
-	uint256 constant public borrowRateMaxIncrease = 500;      		// 5%
+	uint256 constant private borrowRateMaxIncrease = 500;      		// 5%
 
-	uint256 constant public minSuppliersShareRate = 5000;      		// 50%
+	uint256 constant private minSuppliersShareRate = 5000;      	// 50%
 
-	uint256 constant public suppliersShareRateMaxDecrease = 500;	// 5%
+	uint256 constant private suppliersShareRateMaxDecrease = 500;	// 5%
 
-	uint256 constant public maxValueToLoanRate = 20000;      		// 200%
+	uint256 constant private maxValueToLoanRate = 20000;      		// 200%
 
-	uint256 constant public valueToLoanRateMaxIncrease = 500;      	// 5%
+	uint256 constant private valueToLoanRateMaxIncrease = 500;      // 5%
 
-	uint256 constant public maxPenaltyRate = 13000;      			// 130%
+	uint256 constant private maxPenaltyRate = 13000;      			// 130%
 
-	uint256 constant public penaltyRateMaxIncrease = 500;      		// 5%
+	uint256 constant private penaltyRateMaxIncrease = 500;      	// 5%
 
-	uint256 constant public maxPromotionRate = 10000;				// 100%
+	uint256 constant private maxPromotionRate = 10000;				// 100%
 
-	uint256 constant public maxListsLength = 50;
+	uint256 constant private maxListsLength = 50;
 
 	/// @dev Used for calculating liquidation threshold 
 	/// There is 5% gap between value to loan rate and liquidation rate
@@ -133,18 +146,17 @@ contract HoldefiSettings is HoldefiOwnable {
 	event BonusRateChanged(address indexed collateral, uint256 newRate, uint256 oldRate);
 
 
-
 	/// @dev Modifier to make a function callable only when the market is exist
 	/// @param market Address of the given market
     modifier marketIsExist(address market) {
-        require (marketAssets[market].isExist, "The market is not exist");
+        require (marketAssets[market].isExist, "SE01");
         _;
     }
 
 	/// @dev Modifier to make a function callable only when the collateral is exist
 	/// @param collateral Address of the given collateral
     modifier collateralIsExist(address collateral) {
-        require (collateralAssets[collateral].isExist, "The collateral is not exist");
+        require (collateralAssets[collateral].isExist, "SE02");
         _;
     }
 
@@ -157,14 +169,14 @@ contract HoldefiSettings is HoldefiOwnable {
  	/// @notice Activate a market asset
 	/// @dev Can only be called by the owner
 	/// @param market Address of the given market
-	function activateMarket (address market) public onlyOwner marketIsExist(market) {
+	function activateMarket (address market) external onlyOwner marketIsExist(market) {
 		activateMarketInternal(market);
 	}
 
 	/// @notice Deactivate a market asset
 	/// @dev Can only be called by the owner
 	/// @param market Address of the given market
-	function deactivateMarket (address market) public onlyOwner marketIsExist(market) {
+	function deactivateMarket (address market) external onlyOwner marketIsExist(market) {
 		marketAssets[market].isActive = false;
 		emit MarketActivationChanged(market, false);
 	}
@@ -172,21 +184,21 @@ contract HoldefiSettings is HoldefiOwnable {
 	/// @notice Activate a collateral asset
 	/// @dev Can only be called by the owner
 	/// @param collateral Address the given collateral
-	function activateCollateral (address collateral) public onlyOwner collateralIsExist(collateral) {
+	function activateCollateral (address collateral) external onlyOwner collateralIsExist(collateral) {
 		activateCollateralInternal(collateral);
 	}
 
 	/// @notice Deactivate a collateral asset
 	/// @dev Can only be called by the owner
 	/// @param collateral Address of the given collateral
-	function deactivateCollateral (address collateral) public onlyOwner collateralIsExist(collateral) {
+	function deactivateCollateral (address collateral) external onlyOwner collateralIsExist(collateral) {
 		collateralAssets[collateral].isActive = false;
 		emit CollateralActivationChanged(collateral, false);
 	}
 
 	/// @notice Returns the list of markets
 	/// @return res List of markets
-	function getMarketsList() external view returns (address[] memory res){
+	function getMarketsList() external view returns (address[] memory res) {
 		res = marketsList;
 	}
 
@@ -194,10 +206,8 @@ contract HoldefiSettings is HoldefiOwnable {
 	/// @dev Can only be called by the owner
 	/// @param holdefiContractAddress Address of the Holdefi contract
 	function setHoldefiContract(HoldefiInterface holdefiContractAddress) external onlyOwner {
-		require (holdefiContractAddress.holdefiSettings() == address(this),
-			"Conflict with Holdefi contract address"
-		);
-		require (address(holdefiContract) == address(0), "Should be set once");
+		require (holdefiContractAddress.holdefiSettings() == address(this), "SE03");
+		require (address(holdefiContract) == address(0), "SE04");
 		holdefiContract = holdefiContractAddress;
 	}
 
@@ -233,7 +243,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	/// @param market Address of the given market
 	/// @param newPromotionRate New promotion rate
 	function setPromotionRate (address market, uint256 newPromotionRate) external onlyOwner {
-		require (newPromotionRate <= maxPromotionRate, "Rate should be in allowed range");
+		require (newPromotionRate <= maxPromotionRate, "SE05");
 
 		holdefiContract.reserveSettlement(market);
 
@@ -245,7 +255,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	/// @dev Can only be called by holdefi contract
 	/// @param market Address of the given market
 	function resetPromotionRate (address market) external {
-		require (msg.sender == address(holdefiContract), "Sender is not Holdefi contract");
+		require (msg.sender == address(holdefiContract), "SE06");
 
 		emit PromotionRateChanged(market, 0, marketAssets[market].promotionRate);
 		marketAssets[market].promotionRate = 0;
@@ -320,8 +330,8 @@ contract HoldefiSettings is HoldefiOwnable {
 		external
 		onlyOwner
 	{
-		require (!marketAssets[market].isExist, "The market is exist");
-		require (marketsList.length < maxListsLength, "Market list is full");
+		require (!marketAssets[market].isExist, "SE08");
+		require (marketsList.length < maxListsLength, "SE09");
 
 		if (market != ethAddress) {
 			IERC20(market);
@@ -341,8 +351,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	/// @dev Can only be called by the owner
 	/// @param market Address of the given market
 	function removeMarket (address market) external onlyOwner marketIsExist(market) {
-		uint256 totalBorrow = holdefiContract.marketAssets(market).totalBorrow;
-		require (totalBorrow == 0, "Total borrow is not zero");
+		require (holdefiContract.marketAssets(market).totalBorrow == 0, "SE10");
 		
 		holdefiContract.beforeChangeBorrowRate(market);
 
@@ -381,7 +390,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		external
 		onlyOwner
 	{
-		require (!collateralAssets[collateral].isExist, "The collateral is exist");
+		require (!collateralAssets[collateral].isExist, "SE07");
 
 		if (collateral != ethAddress) {
 			IERC20(collateral);
@@ -411,16 +420,16 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	/// @notice Set borrow rate operation
 	function setBorrowRateInternal (address market, uint256 newBorrowRate) internal {
-		require (newBorrowRate <= maxBorrowRate, "Rate should be less than max");
+		require (newBorrowRate <= maxBorrowRate, "SE05");
 		uint256 currentTime = block.timestamp;
 
 		if (marketAssets[market].borrowRateUpdateTime != 0) {
 			if (newBorrowRate > marketAssets[market].borrowRate) {
 				uint256 deltaTime = currentTime.sub(marketAssets[market].borrowRateUpdateTime);
-				require (deltaTime >= periodBetweenUpdates, "Increasing rate is not allowed at this time");
+				require (deltaTime >= periodBetweenUpdates, "SE11");
 
 				uint256 maxIncrease = marketAssets[market].borrowRate.add(borrowRateMaxIncrease);
-				require (newBorrowRate <= maxIncrease, "Rate should be increased less than max allowed");
+				require (newBorrowRate <= maxIncrease, "SE12");
 			}
 
 			holdefiContract.beforeChangeBorrowRate(market);
@@ -436,19 +445,19 @@ contract HoldefiSettings is HoldefiOwnable {
 	function setSuppliersShareRateInternal (address market, uint256 newSuppliersShareRate) internal {
 		require (
 			newSuppliersShareRate >= minSuppliersShareRate && newSuppliersShareRate <= rateDecimals,
-			"Rate should be in allowed range"
+			"SE05"
 		);
 		uint256 currentTime = block.timestamp;
 
 		if (marketAssets[market].suppliersShareRateUpdateTime != 0) {
 			if (newSuppliersShareRate < marketAssets[market].suppliersShareRate) {
 				uint256 deltaTime = currentTime.sub(marketAssets[market].suppliersShareRateUpdateTime);
-				require (deltaTime >= periodBetweenUpdates, "Decreasing rate is not allowed at this time");
+				require (deltaTime >= periodBetweenUpdates, "SE11");
 
 				uint256 decreasedAllowed = newSuppliersShareRate.add(suppliersShareRateMaxDecrease);
 				require (
 					marketAssets[market].suppliersShareRate <= decreasedAllowed,
-					"Rate should be decreased less than max allowed"
+					"SE12"
 				);
 			}
 
@@ -470,7 +479,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		require (
 			newValueToLoanRate <= maxValueToLoanRate &&
 			collateralAssets[collateral].penaltyRate.add(fivePercentLiquidationGap) <= newValueToLoanRate,
-			"Rate should be in allowed range"
+			"SE05"
 		);
 		
 		uint256 currentTime = block.timestamp;
@@ -479,11 +488,11 @@ contract HoldefiSettings is HoldefiOwnable {
 			newValueToLoanRate > collateralAssets[collateral].valueToLoanRate
 		) {
 			uint256 deltaTime = currentTime.sub(collateralAssets[collateral].VTLUpdateTime);
-			require (deltaTime >= periodBetweenUpdates,"Increasing rate is not allowed at this time");
+			require (deltaTime >= periodBetweenUpdates,"SE11");
 			uint256 maxIncrease = collateralAssets[collateral].valueToLoanRate.add(
 				valueToLoanRateMaxIncrease
 			);
-			require (newValueToLoanRate <= maxIncrease,"Rate should be increased less than max allowed");
+			require (newValueToLoanRate <= maxIncrease,"SE12");
 		}
 		emit ValueToLoanRateChanged(
 			collateral,
@@ -501,7 +510,7 @@ contract HoldefiSettings is HoldefiOwnable {
 			newPenaltyRate <= maxPenaltyRate &&
 			newPenaltyRate <= collateralAssets[collateral].valueToLoanRate.sub(fivePercentLiquidationGap) &&
 			collateralAssets[collateral].bonusRate <= newPenaltyRate,
-			"Rate should be in allowed range"
+			"SE05"
 		);
 
 		uint256 currentTime = block.timestamp;
@@ -510,9 +519,9 @@ contract HoldefiSettings is HoldefiOwnable {
 			newPenaltyRate > collateralAssets[collateral].penaltyRate
 		) {
 			uint256 deltaTime = currentTime.sub(collateralAssets[collateral].penaltyUpdateTime);
-			require (deltaTime >= periodBetweenUpdates, "Increasing rate is not allowed at this time");
+			require (deltaTime >= periodBetweenUpdates, "SE11");
 			uint256 maxIncrease = collateralAssets[collateral].penaltyRate.add(penaltyRateMaxIncrease);
-			require (newPenaltyRate <= maxIncrease, "Rate should be increased less than max allowed");
+			require (newPenaltyRate <= maxIncrease, "SE12");
 		}
 
 		emit PenaltyRateChanged(collateral, newPenaltyRate, collateralAssets[collateral].penaltyRate);
@@ -525,7 +534,7 @@ contract HoldefiSettings is HoldefiOwnable {
 	function setBonusRateInternal (address collateral, uint256 newBonusRate) internal {
 		require (
 			newBonusRate <= collateralAssets[collateral].penaltyRate && newBonusRate >= rateDecimals,
-			"Rate should be in allowed range"
+			"SE05"
 		);
 		
 		emit BonusRateChanged(collateral, newBonusRate, collateralAssets[collateral].bonusRate);
