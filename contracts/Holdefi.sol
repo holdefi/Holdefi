@@ -1341,6 +1341,7 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 	function depositPromotionReserveInternal (address market, uint256 amount)
 		internal
 		nonReentrant
+		whenNotPaused("depositPromotionReserve")
 		marketIsActive(market)
 	{
 		uint256 transferAmount = transferFromSender(address(this), market, amount);
@@ -1357,6 +1358,7 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 	function depositLiquidationReserveInternal (address collateral, uint256 amount)
 		internal
 		nonReentrant
+		whenNotPaused("depositLiquidationReserve")
 		collateralIsActive(collateral)
 	{
 		uint256 transferAmount = transferFromSender(address(holdefiCollaterals), collateral, amount);

@@ -48,6 +48,8 @@ contract HoldefiPausableOwnable is HoldefiOwnable {
         paused["repayBorrow"].isValid = true;
         paused["liquidateBorrowerCollateral"].isValid = true;
         paused["buyLiquidatedCollateral"].isValid = true;
+        paused["depositPromotionReserve"].isValid = true;
+        paused["depositLiquidationReserve"].isValid = true;
     }
 
     /// @dev Modifier to make a function callable only by owner or pauser
