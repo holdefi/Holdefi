@@ -69,7 +69,7 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-	uint256 constant public periodBetweenUpdates = 864000;      	// seconds per ten days
+	uint256 constant public periodBetweenUpdates = 604800;      	// seconds per week
 
 	uint256 constant public maxBorrowRate = 4000;      				// 40%
 
@@ -87,9 +87,9 @@ contract HoldefiSettings is HoldefiOwnable {
 
 	uint256 constant public penaltyRateMaxIncrease = 500;      		// 5%
 
-	uint256 constant public maxPromotionRate = 3000;				// 30%
+	uint256 constant public maxPromotionRate = 10000;				// 100%
 
-	uint256 constant public maxListsLength = 25;
+	uint256 constant public maxListsLength = 50;
 
 	/// @dev Used for calculating liquidation threshold 
 	/// There is 5% gap between value to loan rate and liquidation rate
