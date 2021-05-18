@@ -244,7 +244,7 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 	event UpdateSupplyIndex(address indexed market, uint256 newSupplyIndex, uint256 supplyRate);
 
 	/// @notice Event emitted when the borrow index is updated for a market asset
-	event UpdateBorrowIndex(address indexed market, uint256 newBorrowIndex);
+	event UpdateBorrowIndex(address indexed market, uint256 newBorrowIndex, uint256 borrowRate);
 
 	/// @notice Event emitted when the collateral is liquidated
 	event CollateralLiquidated(
@@ -1058,12 +1058,12 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 	/// @notice Update borrow index of a market
 	/// @param market Address of the given market
 	function updateBorrowIndex (address market) internal {
-		(uint256 currentBorrowIndex,) = getCurrentBorrowIndex(market);
+		(uint256 currentBorrowIndex, uint256 borrowRate) = getCurrentBorrowIndex(market);
 
 		marketAssets[market].borrowIndex = currentBorrowIndex;
 		marketAssets[market].borrowIndexUpdateTime = block.timestamp;
 
-		emit UpdateBorrowIndex(market, currentBorrowIndex);
+		emit UpdateBorrowIndex(market, currentBorrowIndex, borrowRate);
 	}
 
 	/// @notice Transfer ETH or ERC20 asset from this contract
