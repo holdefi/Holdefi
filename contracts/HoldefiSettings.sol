@@ -221,8 +221,7 @@ contract HoldefiSettings is HoldefiOwnable {
 		}
 		else {
 			uint256 totalInterestFromBorrow = totalBorrow.mul(borrowRate);
-			uint256 suppliersShare = totalInterestFromBorrow.mul(marketAssets[market].suppliersShareRate);
-			suppliersShare = suppliersShare.div(rateDecimals);
+			uint256 suppliersShare = totalInterestFromBorrow.mul(marketAssets[market].suppliersShareRate).div(rateDecimals);
 			supplyRateBase = suppliersShare.div(totalSupply);
 		}
 		promotionRate = marketAssets[market].promotionRate;
@@ -236,7 +235,6 @@ contract HoldefiSettings is HoldefiOwnable {
 	function setPromotionRate (address market, uint256 newPromotionRate) external onlyOwner {
 		require (newPromotionRate <= maxPromotionRate, "Rate should be in allowed range");
 
-		holdefiContract.beforeChangeSupplyRate(market);
 		holdefiContract.reserveSettlement(market);
 
 		emit PromotionRateChanged(market, newPromotionRate, marketAssets[market].promotionRate);
