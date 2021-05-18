@@ -350,21 +350,15 @@ contract HoldefiSettings is HoldefiOwnable {
 		
 		holdefiContract.beforeChangeBorrowRate(market);
 
-		uint256 i;
 		uint256 index;
 		uint256 marketListLength = marketsList.length;
-		for (i = 0 ; i < marketListLength ; i++) {
+		for (uint256 i = 0 ; i < marketListLength ; i++) {
 			if (marketsList[i] == market) {
 				index = i;
 			}
 		}
 
-		if (index != marketListLength-1) {
-			for (i = index ; i < marketListLength-1 ; i++) {
-				marketsList[i] = marketsList[i+1];
-			}
-		}
-
+		marketsList[index] = marketsList[marketListLength-1];
 		marketsList.pop();
 		delete marketAssets[market];
 		emit MarketExistenceChanged(market, false);
