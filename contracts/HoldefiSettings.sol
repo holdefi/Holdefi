@@ -3,7 +3,6 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./HoldefiOwnable.sol";
 
 /// @notice File: contracts/Holdefi.sol
@@ -333,10 +332,6 @@ contract HoldefiSettings is HoldefiOwnable {
 		require (!marketAssets[market].isExist, "SE08");
 		require (marketsList.length < maxListsLength, "SE09");
 
-		if (market != ethAddress) {
-			IERC20(market);
-		}
-
 		marketsList.push(market);
 		marketAssets[market].isExist = true;
 		emit MarketExistenceChanged(market, true);
@@ -391,10 +386,6 @@ contract HoldefiSettings is HoldefiOwnable {
 		onlyOwner
 	{
 		require (!collateralAssets[collateral].isExist, "SE07");
-
-		if (collateral != ethAddress) {
-			IERC20(collateral);
-		}
 
 		collateralAssets[collateral].isExist = true;
 		emit CollateralExistenceChanged(collateral, true);
