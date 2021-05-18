@@ -3,6 +3,7 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./HoldefiPausableOwnable.sol";
 import "./HoldefiCollaterals.sol";
 
@@ -77,7 +78,7 @@ interface HoldefiSettingsInterface {
 ///		E15: Sender should be Holdefi Settings contract
 ///		E16: There is not enough collateral
 ///		E17: Amount should be less than the market debt
-contract Holdefi is HoldefiPausableOwnable {
+contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 
 	using SafeMath for uint256;
 
@@ -1091,6 +1092,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform supply operation
 	function supplyInternal(address account, address market, uint256 amount, uint16 referralCode)
 		internal
+		nonReentrant
 		whenNotPaused("supply")
 		marketIsActive(market)
 	{
@@ -1123,6 +1125,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform withdraw supply operation
 	function withdrawSupplyInternal (address account, address market, uint256 amount) 
 		internal
+		nonReentrant
 		whenNotPaused("withdrawSupply")
 	{
 		MarketData memory supplyData;
@@ -1135,24 +1138,22 @@ contract Holdefi is HoldefiPausableOwnable {
 			transferAmount = totalSuppliedBalance;
 		}
 
-		uint256 remaining = 0;
 		if (transferAmount <= supplyData.interest) {
 			supplyData.interest = supplyData.interest.sub(transferAmount);
 		}
 		else {
-			remaining = transferAmount.sub(supplyData.interest);
+			uint256 remaining = transferAmount.sub(supplyData.interest);
 			supplyData.interest = 0;
 			supplyData.balance = supplyData.balance.sub(remaining);
+
+			beforeChangeSupplyRate(market);
+			marketAssets[market].totalSupply = marketAssets[market].totalSupply.sub(remaining);	
 		}
 
 		supplies[account][market].balance = supplyData.balance;
 		supplies[account][market].accumulatedInterest = supplyData.interest;
 		supplies[account][market].lastInterestIndex = supplyData.currentIndex;
 
-		beforeChangeSupplyRate(market);
-		
-		marketAssets[market].totalSupply = marketAssets[market].totalSupply.sub(remaining);	
-		
 		transferFromHoldefi(msg.sender, market, transferAmount);
 	
 		emit WithdrawSupply(
@@ -1169,6 +1170,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform collateralize operation
 	function collateralizeInternal (address account, address collateral, uint256 amount)
 		internal
+		nonReentrant
 		whenNotPaused("collateralize")
 		collateralIsActive(collateral)
 	{
@@ -1189,6 +1191,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform withdraw collateral operation
 	function withdrawCollateralInternal (address account, address collateral, uint256 amount) 
 		internal
+		nonReentrant
 		whenNotPaused("withdrawCollateral")
 	{
 		(uint256 balance,, uint256 borrowPowerValue, uint256 totalBorrowValue,) =
@@ -1223,6 +1226,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform borrow operation
 	function borrowInternal (address account, address market, address collateral, uint256 amount, uint16 referralCode)
 		internal
+		nonReentrant
 		whenNotPaused("borrow")
 		marketIsActive(market)
 		collateralIsActive(collateral)
@@ -1264,6 +1268,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform repay borrow operation
 	function repayBorrowInternal (address account, address market, address collateral, uint256 amount)
 		internal
+		nonReentrant
 		whenNotPaused("repayBorrow")
 	{
 		MarketData memory borrowData;
@@ -1273,34 +1278,32 @@ contract Holdefi is HoldefiPausableOwnable {
 		uint256 totalBorrowedBalance = borrowData.balance.add(borrowData.interest);
 		require (totalBorrowedBalance != 0, "E09");
 
-		uint256 transferAmount = amount;
+		uint256 transferAmount = transferFromSender(address(this), market, amount);
+		uint256 extra = 0;
 		if (transferAmount > totalBorrowedBalance) {
+			extra = transferAmount.sub(totalBorrowedBalance);
 			transferAmount = totalBorrowedBalance;
-			if (market == ethAddress) {
-				uint256 extra = amount.sub(transferAmount);
-				transferFromHoldefi(msg.sender, ethAddress, extra);
-			}
 		}
-		
-		transferAmount = transferFromSender(address(this), market, transferAmount);
 
-		uint256 remaining = 0;
 		if (transferAmount <= borrowData.interest) {
 			borrowData.interest = borrowData.interest.sub(transferAmount);
 		}
 		else {
-			remaining = transferAmount.sub(borrowData.interest);
+			uint256 remaining = transferAmount.sub(borrowData.interest);
 			borrowData.interest = 0;
 			borrowData.balance = borrowData.balance.sub(remaining);
+
+			beforeChangeSupplyRate(market);
+			marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(remaining);	
 		}
 		borrows[account][collateral][market].balance = borrowData.balance;
 		borrows[account][collateral][market].accumulatedInterest = borrowData.interest;
 		borrows[account][collateral][market].lastInterestIndex = borrowData.currentIndex;
 		collaterals[account][collateral].lastUpdateTime = block.timestamp;
 
-		beforeChangeSupplyRate(market);
-		
-		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.sub(remaining);	
+		if (extra > 0) {
+			transferFromHoldefi(msg.sender, market, extra);
+		}
 
 		emit RepayBorrow (
 			msg.sender,
@@ -1317,6 +1320,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform buy liquidated collateral operation
 	function buyLiquidatedCollateralInternal (address market, address collateral, uint256 marketAmount)
 		internal
+		nonReentrant
 		whenNotPaused("buyLiquidatedCollateral")
 	{
 		uint256 transferAmount = transferFromSender(address(this), market, marketAmount);
@@ -1336,6 +1340,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform deposit promotion reserve operation
 	function depositPromotionReserveInternal (address market, uint256 amount)
 		internal
+		nonReentrant
 		marketIsActive(market)
 	{
 		uint256 transferAmount = transferFromSender(address(this), market, amount);
@@ -1351,6 +1356,7 @@ contract Holdefi is HoldefiPausableOwnable {
 	/// @notice Perform deposit liquidation reserve operation
 	function depositLiquidationReserveInternal (address collateral, uint256 amount)
 		internal
+		nonReentrant
 		collateralIsActive(collateral)
 	{
 		uint256 transferAmount = transferFromSender(address(holdefiCollaterals), collateral, amount);
