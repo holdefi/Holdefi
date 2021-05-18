@@ -1078,10 +1078,13 @@ contract Holdefi is HoldefiPausableOwnable {
 	}
 
 	/// @notice Transfer ERC20 asset from msg.sender
-	function transferFromSender(address receiver, address asset, uint256 amount) internal {
+	function transferFromSender(address receiver, address asset, uint256 amount) internal returns(uint256 transferAmount) {
+		transferAmount = amount;
 		if (asset != ethAddress) {
 			IERC20 token = IERC20(asset);
+			uint256 oldBalance = token.balanceOf(receiver);
 			token.safeTransferFrom(msg.sender, receiver, amount);
+			transferAmount = token.balanceOf(receiver).sub(oldBalance);
 		}
 	}
 
@@ -1091,25 +1094,25 @@ contract Holdefi is HoldefiPausableOwnable {
 		whenNotPaused("supply")
 		marketIsActive(market)
 	{
-		transferFromSender(address(this), market, amount);
+		uint256 transferAmount = transferFromSender(address(this), market, amount);
 
 		MarketData memory supplyData;
 		(supplyData.balance, supplyData.interest, supplyData.currentIndex) = getAccountSupply(account, market);
 		
-		supplyData.balance = supplyData.balance.add(amount);
+		supplyData.balance = supplyData.balance.add(transferAmount);
 		supplies[account][market].balance = supplyData.balance;
 		supplies[account][market].accumulatedInterest = supplyData.interest;
 		supplies[account][market].lastInterestIndex = supplyData.currentIndex;
 
 		beforeChangeSupplyRate(market);
 		
-		marketAssets[market].totalSupply = marketAssets[market].totalSupply.add(amount);
+		marketAssets[market].totalSupply = marketAssets[market].totalSupply.add(transferAmount);
 
 		emit Supply(
 			msg.sender,
 			account,
 			market,
-			amount,
+			transferAmount,
 			supplyData.balance,
 			supplyData.interest,
 			supplyData.currentIndex,
@@ -1169,18 +1172,18 @@ contract Holdefi is HoldefiPausableOwnable {
 		whenNotPaused("collateralize")
 		collateralIsActive(collateral)
 	{
-		transferFromSender(address(holdefiCollaterals), collateral, amount);
+		uint256 transferAmount = transferFromSender(address(holdefiCollaterals), collateral, amount);
 		if (collateral == ethAddress) {
 			transferFromHoldefi(address(holdefiCollaterals), collateral, amount);
 		}
 
-		uint256 balance = collaterals[account][collateral].balance.add(amount);
+		uint256 balance = collaterals[account][collateral].balance.add(transferAmount);
 		collaterals[account][collateral].balance = balance;
 		collaterals[account][collateral].lastUpdateTime = block.timestamp;
 
-		collateralAssets[collateral].totalCollateral = collateralAssets[collateral].totalCollateral.add(amount);	
+		collateralAssets[collateral].totalCollateral = collateralAssets[collateral].totalCollateral.add(transferAmount);	
 		
-		emit Collateralize(msg.sender, account, collateral, amount, balance);
+		emit Collateralize(msg.sender, account, collateral, transferAmount, balance);
 	}
 
 	/// @notice Perform withdraw collateral operation
@@ -1279,7 +1282,7 @@ contract Holdefi is HoldefiPausableOwnable {
 			}
 		}
 		
-		transferFromSender(address(this), market, transferAmount);
+		transferAmount = transferFromSender(address(this), market, transferAmount);
 
 		uint256 remaining = 0;
 		if (transferAmount <= borrowData.interest) {
@@ -1316,18 +1319,18 @@ contract Holdefi is HoldefiPausableOwnable {
 		internal
 		whenNotPaused("buyLiquidatedCollateral")
 	{
-		transferFromSender(address(this), market, marketAmount);
+		uint256 transferAmount = transferFromSender(address(this), market, marketAmount);
 
 		uint256 collateralAmountWithDiscount =
-			getDiscountedCollateralAmount(market, collateral, marketAmount);
+			getDiscountedCollateralAmount(market, collateral, transferAmount);
 
 		collateralAssets[collateral].totalLiquidatedCollateral = 
 			collateralAssets[collateral].totalLiquidatedCollateral.sub(collateralAmountWithDiscount, 'E16');
-		marketDebt[collateral][market] = marketDebt[collateral][market].sub(marketAmount, 'E17');
+		marketDebt[collateral][market] = marketDebt[collateral][market].sub(transferAmount, 'E17');
 
 		holdefiCollaterals.withdraw(collateral, msg.sender, collateralAmountWithDiscount);
 
-		emit BuyLiquidatedCollateral(market, collateral, marketAmount, collateralAmountWithDiscount);
+		emit BuyLiquidatedCollateral(market, collateral, transferAmount, collateralAmountWithDiscount);
 	}
 
 	/// @notice Perform deposit promotion reserve operation
@@ -1335,14 +1338,14 @@ contract Holdefi is HoldefiPausableOwnable {
 		internal
 		marketIsActive(market)
 	{
-		transferFromSender(address(this), market, amount);
+		uint256 transferAmount = transferFromSender(address(this), market, amount);
 
-		uint256 amountScaled = amount.mul(secondsPerYear).mul(rateDecimals);
+		uint256 amountScaled = transferAmount.mul(secondsPerYear).mul(rateDecimals);
 
 		marketAssets[market].promotionReserveScaled = 
 			marketAssets[market].promotionReserveScaled.add(amountScaled);
 
-		emit PromotionReserveDeposited(market, amount, marketAssets[market].promotionReserveScaled);
+		emit PromotionReserveDeposited(market, transferAmount, marketAssets[market].promotionReserveScaled);
 	}
 
 	/// @notice Perform deposit liquidation reserve operation
@@ -1350,14 +1353,14 @@ contract Holdefi is HoldefiPausableOwnable {
 		internal
 		collateralIsActive(collateral)
 	{
-		transferFromSender(address(holdefiCollaterals), collateral, amount);
+		uint256 transferAmount = transferFromSender(address(holdefiCollaterals), collateral, amount);
 		if (collateral == ethAddress) {
 			transferFromHoldefi(address(holdefiCollaterals), collateral, amount);
 		}
-		
+
 		collateralAssets[collateral].totalLiquidatedCollateral =
-			collateralAssets[collateral].totalLiquidatedCollateral.add(amount);
+			collateralAssets[collateral].totalLiquidatedCollateral.add(transferAmount);
 		
-		emit LiquidationReserveDeposited(collateral, amount);
+		emit LiquidationReserveDeposited(collateral, transferAmount);
 	}
 }
