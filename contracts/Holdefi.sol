@@ -435,55 +435,6 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 		}
 	}
 
-	/// @notice Returns maximum amount spender can withdraw from account supplies on a given market
-	/// @param account Supplier address
-	/// @param spender Spender address
-	/// @param market Address of the given market
-	/// @return res Maximum amount spender can withdraw from account supplies on a given market
-	function getAccountWithdrawSupplyAllowance (address account, address spender, address market)
-		external 
-		view
-		returns (uint256 res)
-	{
-		res = supplies[account][market].allowance[spender];
-	}
-
-	/// @notice Returns maximum amount spender can withdraw from account balance on a given collateral
-	/// @param account Account address
-	/// @param spender Spender address
-	/// @param collateral Address of the given collateral
-	/// @return res Maximum amount spender can withdraw from account balance on a given collateral
-	function getAccountWithdrawCollateralAllowance (
-		address account, 
-		address spender, 
-		address collateral
-	)
-		external 
-		view
-		returns (uint256 res)
-	{
-		res = collaterals[account][collateral].allowance[spender];
-	}
-
-	/// @notice Returns maximum amount spender can withdraw from account borrows on a given market based on a given collteral
-	/// @param account Borrower address
-	/// @param spender Spender address
-	/// @param market Address of the given market
-	/// @param collateral Address of the given collateral
-	/// @return res Maximum amount spender can withdraw from account borrows on a given market based on a given collteral
-	function getAccountBorrowAllowance (
-		address account, 
-		address spender, 
-		address market, 
-		address collateral
-	)
-		external 
-		view
-		returns (uint256 res)
-	{
-		res = borrows[account][collateral][market].allowance[spender];
-	}
-
 	/// @notice Returns total borrow value of an account based on a given collateral 
 	/// @param account Account address
     /// @param collateral Address of the given collateral
@@ -666,6 +617,55 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 	function beforeChangeBorrowRate (address market) external {
 		updateBorrowIndex(market);
 		beforeChangeSupplyRate(market);
+	}
+
+	/// @notice Returns maximum amount spender can withdraw from account supplies on a given market
+	/// @param account Supplier address
+	/// @param spender Spender address
+	/// @param market Address of the given market
+	/// @return res Maximum amount spender can withdraw from account supplies on a given market
+	function getAccountWithdrawSupplyAllowance (address account, address spender, address market)
+		external 
+		view
+		returns (uint256 res)
+	{
+		res = supplies[account][market].allowance[spender];
+	}
+
+	/// @notice Returns maximum amount spender can withdraw from account balance on a given collateral
+	/// @param account Account address
+	/// @param spender Spender address
+	/// @param collateral Address of the given collateral
+	/// @return res Maximum amount spender can withdraw from account balance on a given collateral
+	function getAccountWithdrawCollateralAllowance (
+		address account, 
+		address spender, 
+		address collateral
+	)
+		external 
+		view
+		returns (uint256 res)
+	{
+		res = collaterals[account][collateral].allowance[spender];
+	}
+
+	/// @notice Returns maximum amount spender can withdraw from account borrows on a given market based on a given collteral
+	/// @param account Borrower address
+	/// @param spender Spender address
+	/// @param market Address of the given market
+	/// @param collateral Address of the given collateral
+	/// @return res Maximum amount spender can withdraw from account borrows on a given market based on a given collteral
+	function getAccountBorrowAllowance (
+		address account, 
+		address spender, 
+		address market, 
+		address collateral
+	)
+		external 
+		view
+		returns (uint256 res)
+	{
+		res = borrows[account][collateral][market].allowance[spender];
 	}
 
 	/// @notice Deposit ERC20 asset for supplying
@@ -907,8 +907,8 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 		uint256 totalBorrowedBalanceValue = holdefiPrices.getAssetValueFromAmount(market, totalBorrowedBalance);
 		
 		uint256 liquidatedCollateralValue = totalBorrowedBalanceValue
-		.mul(holdefiSettings.collateralAssets(collateral).penaltyRate)
-		.div(rateDecimals);
+			.mul(holdefiSettings.collateralAssets(collateral).penaltyRate)
+			.div(rateDecimals);
 
 		uint256 liquidatedCollateral =
 			holdefiPrices.getAssetAmountFromValue(collateral, liquidatedCollateralValue);
@@ -980,7 +980,7 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 			collateralAssets[collateral].totalLiquidatedCollateral.sub(transferAmount);
 		holdefiCollaterals.withdraw(collateral, msg.sender, transferAmount);
 
-		emit LiquidationReserveWithdrawn(collateral, amount);
+		emit LiquidationReserveWithdrawn(collateral, transferAmount);
 	}
 
 	/// @notice Deposit ERC20 asset as promotion reserve
@@ -1107,7 +1107,6 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 		supplies[account][market].lastInterestIndex = supplyData.currentIndex;
 
 		beforeChangeSupplyRate(market);
-		
 		marketAssets[market].totalSupply = marketAssets[market].totalSupply.add(transferAmount);
 
 		emit Supply(
@@ -1247,7 +1246,6 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 		collaterals[account][collateral].lastUpdateTime = block.timestamp;
 
 		beforeChangeSupplyRate(market);
-
 		marketAssets[market].totalBorrow = marketAssets[market].totalBorrow.add(amount);
 
 		transferFromHoldefi(msg.sender, market, amount);
@@ -1304,7 +1302,7 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 		if (extra > 0) {
 			transferFromHoldefi(msg.sender, market, extra);
 		}
-
+		
 		emit RepayBorrow (
 			msg.sender,
 			account,
@@ -1324,14 +1322,13 @@ contract Holdefi is HoldefiPausableOwnable, ReentrancyGuard {
 		whenNotPaused("buyLiquidatedCollateral")
 	{
 		uint256 transferAmount = transferFromSender(address(this), market, marketAmount);
-
-		uint256 collateralAmountWithDiscount =
-			getDiscountedCollateralAmount(market, collateral, transferAmount);
-
-		collateralAssets[collateral].totalLiquidatedCollateral = 
-			collateralAssets[collateral].totalLiquidatedCollateral.sub(collateralAmountWithDiscount, 'E16');
 		marketDebt[collateral][market] = marketDebt[collateral][market].sub(transferAmount, 'E17');
 
+		uint256 collateralAmountWithDiscount =
+			getDiscountedCollateralAmount(market, collateral, transferAmount);		
+		collateralAssets[collateral].totalLiquidatedCollateral = 
+			collateralAssets[collateral].totalLiquidatedCollateral.sub(collateralAmountWithDiscount, 'E16');
+		
 		holdefiCollaterals.withdraw(collateral, msg.sender, collateralAmountWithDiscount);
 
 		emit BuyLiquidatedCollateral(market, collateral, transferAmount, collateralAmountWithDiscount);
