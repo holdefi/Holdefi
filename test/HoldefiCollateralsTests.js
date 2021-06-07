@@ -18,16 +18,16 @@ contract('HoldefiCollaterals', function([owner, user1, user2]){
 		assert.equal(Holdefi.address.toString(), HoldefiContractAddress.toString());
 	});
 
-	it('Fail if call withdraw', async () => {
+	it('Fail if an account call withdraw function', async () => {
 		await expectRevert(
 			HoldefiCollaterals.withdraw(SampleToken1.address, user1, decimal18.multipliedBy(10)),
-			"Sender should be holdefi contract"
+			"CE01"
 		);
 	});
 
-	it('Fail if other account send ETH', async () => {
+	it('Fail if an account send ETH to contract', async () => {
 		await expectRevert(
 			HoldefiCollaterals.send(decimal18.multipliedBy(0.5)),
-			"Sender should be holdefi contract");
+			"CE01");
 	});
 });

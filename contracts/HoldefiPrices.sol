@@ -13,13 +13,15 @@ interface ERC20DecimalInterface {
 /// @notice This contract is for getting tokens price
 /// @dev This contract uses Chainlink Oracle to get the tokens price
 /// @dev The address of ETH asset considered as 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+/// @dev Error codes description: 
+///     E01: Asset should not be ETH
 contract HoldefiPrices is HoldefiOwnable {
 
     using SafeMath for uint256;
 
-    address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address constant private ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    uint256 constant public valueDecimals = 30;
+    uint256 constant private valueDecimals = 30;
 
     struct Asset {
         uint256 decimals;
@@ -55,7 +57,7 @@ contract HoldefiPrices is HoldefiOwnable {
             (,int aggregatorPrice,,,) = assets[asset].priceContract.latestRoundData();
             priceDecimals = assets[asset].priceContract.decimals();
             if (aggregatorPrice > 0) {
-                price = uint(aggregatorPrice);
+                price = uint256(aggregatorPrice);
             }
             else {
                 revert();
@@ -71,7 +73,7 @@ contract HoldefiPrices is HoldefiOwnable {
         external
         onlyOwner
     { 
-        require (asset != ethAddress, "Asset should not be ETH");
+        require (asset != ethAddress, "E01");
         assets[asset].priceContract = priceContractAddress;
 
         try ERC20DecimalInterface(asset).decimals() returns (uint256 tokenDecimals) {
@@ -80,7 +82,7 @@ contract HoldefiPrices is HoldefiOwnable {
         catch {
             assets[asset].decimals = decimals;
         }
-        emit NewPriceAggregator(asset, decimals, address(priceContractAddress));
+        emit NewPriceAggregator(asset, assets[asset].decimals, address(priceContractAddress));
     }
 
     /// @notice Calculates the given asset value based on the given amount 

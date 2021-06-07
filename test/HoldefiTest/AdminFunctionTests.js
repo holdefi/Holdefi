@@ -6,7 +6,7 @@ const {
     bigNumber,
 
     ethAddress,
-    referalCode,
+    referralCode,
     decimal18,
     ratesDecimal,
     secondsPerYear,
@@ -29,224 +29,418 @@ const {
 
 contract("Test Admin functions", function([owner,user1,user2,user3,user4,user5,user6]){
 	
-	// describe("Setting HoldefiPrices contract", async() =>{
-	// 	beforeEach(async () =>{
-	// 		await initializeContracts(owner);
-	// 	})
+	describe("Set HoldefiPrices contract", async() =>{
+		beforeEach(async () =>{
+			await initializeContracts(owner);
+		})
 
-	// 	it('HoldefiPrices contract should be set by owner',async () =>{
- //            let NewHoldefiPricesContract = artifacts.require("HoldefiPrices");
- //            NewHoldefiPrices = await HoldefiPricesContract.new({from: owner});
- //            await Holdefi.setHoldefiPricesContract(NewHoldefiPrices.address)
-	// 		assert.equal(NewHoldefiPrices.address , await Holdefi.holdefiPrices.call());
-	// 	})
+		it('HoldefiPrices contract should be set if owner calls setHoldefiPricesContract',async () =>{
+            let NewHoldefiPricesContract = artifacts.require("HoldefiPrices");
+            NewHoldefiPrices = await HoldefiPricesContract.new({from: owner});
+            await Holdefi.setHoldefiPricesContract(NewHoldefiPrices.address)
+			assert.equal(NewHoldefiPrices.address , await Holdefi.holdefiPrices.call());
+		})
 
-	// 	it('Fail if set by other accounts',async () =>{	
-	// 		let FakeHoldefiPrices = await HoldefiPricesContract.new({from: owner});
-	// 		await expectRevert(
-	// 			Holdefi.setHoldefiPricesContract(FakeHoldefiPrices.address,{from: user1}),
-	// 			"Sender should be owner");
-	// 	})
-	// })
+		it('Fail if a non-owner account calls setHoldefiPricesContract',async () =>{	
+			let FakeHoldefiPrices = await HoldefiPricesContract.new({from: owner});
+			await expectRevert(
+				Holdefi.setHoldefiPricesContract(FakeHoldefiPrices.address,{from: user1}),
+				"OE01");
+		})
 
-	// describe("Update Promotion", async() =>{
-	// 	beforeEach(async () =>{
-	// 		await scenario(owner,user1,user2,user3,user4);
-	// 	})
+		it('Fail if calling reserveSettlement',async () =>{	
+			await expectRevert(
+				Holdefi.reserveSettlement(SampleToken1.address,{from: owner}),
+				"E15");
+		})
+	})
 
-	// 	it('Update promotion debt and promotion reserve if promotionRate != 0',async () =>{
-	// 		await time.increase(time.duration.days(20));
-	// 		let getInterests = await HoldefiSettings.getInterests(SampleToken1.address);
-	// 		await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.01))
-	// 		let time1 = await time.latest();
-	// 		await time.increase(time.duration.days(20));
-	// 		let marketBefore = await Holdefi.marketAssets(SampleToken1.address);
-	// 		await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
-	// 		let time2 = await time.latest();
-	// 		let marketAfter = await Holdefi.marketAssets(SampleToken1.address);
-	// 		let debtScaled = bigNumber(time2-time1).multipliedBy(marketBefore.totalSupply).multipliedBy(ratesDecimal.multipliedBy(0.01));
-	// 		let reserveScaled = bigNumber(time2-time1).multipliedBy(
-	// 			(bigNumber(marketBefore.totalBorrow).multipliedBy(getInterests.borrowRate))
-	// 			.minus(bigNumber(marketBefore.totalSupply).multipliedBy(getInterests.supplyRateBase)));
+	describe("Promotion reserve and debt updates", async() =>{
+		beforeEach(async () =>{
+			await scenario(owner,user1,user2,user3,user4);
+		})
 
-	// 		assert.equal(marketAfter.promotionDebtScaled.toString(), debtScaled.toString(),'Promotion debt updated')
-	// 		assert.equal(bigNumber(marketAfter.promotionReserveScaled).minus(marketBefore.promotionReserveScaled).toString(), reserveScaled.toString(),'Promotion reserve updated')
-	// 	})
+		it('Promotion reserve and debt should be calculated correctly after calling beforeChangeSupplyRate if promotionRate != 0',async () =>{
+			await time.increase(time.duration.days(20));
+			let getInterests = await HoldefiSettings.getInterests(SampleToken1.address);
+			await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.01))
+			let time1 = await time.latest();
+			await time.increase(time.duration.days(20));
+			let marketBefore = await Holdefi.marketAssets(SampleToken1.address);
+			await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
+			let time2 = await time.latest();
+			let marketAfter = await Holdefi.marketAssets(SampleToken1.address);
+			let debtScaled = bigNumber(time2-time1).multipliedBy(marketBefore.totalSupply).multipliedBy(ratesDecimal.multipliedBy(0.01));
+			let reserveScaled = bigNumber(time2-time1).multipliedBy(
+				(bigNumber(marketBefore.totalBorrow).multipliedBy(getInterests.borrowRate))
+				.minus(bigNumber(marketBefore.totalSupply).multipliedBy(getInterests.supplyRateBase)));
 
-	// 	it('No promotion debt if promotionRate = 0',async () =>{
-	// 		await time.increase(time.duration.days(20));
-	// 		await Holdefi.beforeChangeSupplyRate(SampleToken1.address)
-	// 		let marketAfter = await Holdefi.marketAssets(SampleToken1.address);
+			assert.equal(marketAfter.promotionDebtScaled.toString(), debtScaled.toString(),'Promotion debt updated')
+			assert.equal(bigNumber(marketAfter.promotionReserveScaled).minus(marketBefore.promotionReserveScaled).toString(), reserveScaled.toString(),
+				'Promotion reserve updated')
+		})
 
-	// 		assert.equal(marketAfter.promotionDebtScaled.toString(), 0,'Promotion debt should be zero')
-	// 	})
+		it('Promotion debt should not be changed after calling beforeChangeSupplyRate if promotionRate = 0',async () =>{
+			await time.increase(time.duration.days(20));
+			await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1))
+			await time.increase(time.duration.days(40));
+			await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
+			let marketAfter1 = await Holdefi.marketAssets(SampleToken1.address);
+			await time.increase(time.duration.days(20));
+			let marketAfter2 = await Holdefi.marketAssets(SampleToken1.address);
 
-	// 	it('Set promotionRate to 0 if promotionDebt > promotionReserve',async () =>{
-	// 		await time.increase(time.duration.days(20));
-	// 		await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1))
-	// 		await time.increase(time.duration.days(40));
-	// 		await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
-	// 		let marketAfter = await HoldefiSettings.marketAssets(SampleToken1.address);
+			assert.equal(marketAfter2.promotionDebtScaled.toString(), marketAfter2.promotionDebtScaled.toString(),'Promotion debt not changed')
+		})
+
+		it('The promotionRate should be set to 0 after calling beforeChangeSupplyRate if promotionDebt > promotionReserve',async () =>{
+			await time.increase(time.duration.days(20));
+			await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1))
+			await time.increase(time.duration.days(40));
+			await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
+			let marketAfter = await HoldefiSettings.marketAssets(SampleToken1.address);
 			
-	// 		assert.equal(marketAfter.promotionRate.toString(), 0,'Promotion rate should be zero');
-	// 	})
-	// })
+			assert.equal(marketAfter.promotionRate.toString(), 0,'Promotion rate = 0');
+		})
+	})
 
-	// describe("Deposit Promotion Reserve for ERC20", async() =>{
-	// 	beforeEach(async () =>{
-	// 		await scenario(owner,user1,user2,user3,user4);
-	// 		await assignToken(owner, owner, SampleToken1);
-	// 		await time.increase(time.duration.days(5));
-	// 		await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1))
-	// 		adminBalanceBefore = await SampleToken1.balanceOf(owner);
-	// 	})
+	describe("Deposit promotion reserve for ERC20", async() =>{
+		beforeEach(async () =>{
+			await scenario(owner,user1,user2,user3,user4);
+			await assignToken(owner, owner, SampleToken1);
+			await time.increase(time.duration.days(5));
+			await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1))
+			await time.increase(time.duration.days(5));
+			await Holdefi.beforeChangeSupplyRate(SampleToken1.address);
+			adminBalanceBefore = await SampleToken1.balanceOf(owner);
+			contractBalanceBefore = await SampleToken1.balanceOf(Holdefi.address);
+		})
 
-	// 	it('Should Deposit reserves',async () =>{
-	// 		let depositAmount = await convertToDecimals(SampleToken1, 10);
-	// 		await time.advanceBlock();
-	// 		let reserveBefore = (await Holdefi.getPromotionReserve(SampleToken1.address)).promotionReserveScaled;
-	// 		let debtBefore = (await Holdefi.getPromotionDebt(SampleToken1.address)).promotionDebtScaled;
-	// 		await Holdefi.methods['depositPromotionReserve(address,uint256)'](SampleToken1.address, depositAmount);	
-	// 		await time.advanceBlock();	
-	// 		let reserveAfter = (await Holdefi.getPromotionReserve(SampleToken1.address)).promotionReserveScaled;
-	// 		let debtAfter = (await Holdefi.getPromotionDebt(SampleToken1.address)).promotionDebtScaled;
+		it('Promotion reserve should be increased after calling depositPromotionReserve',async () =>{
+			let depositAmount = await convertToDecimals(SampleToken1, 10);
+			let reserveBefore = (await Holdefi.marketAssets(SampleToken1.address)).promotionReserveScaled;
+			let debtBefore = await Holdefi.getPromotionDebt(SampleToken1.address);
+			await Holdefi.methods['depositPromotionReserve(address,uint256)'](SampleToken1.address, depositAmount);		
+			let reserveAfter = (await Holdefi.marketAssets(SampleToken1.address)).promotionReserveScaled;
+			let debtAfter = await Holdefi.getPromotionDebt(SampleToken1.address);
 
-	// 		let amountScaled = depositAmount.multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
-	// 		let adminBalanceAfter = await SampleToken1.balanceOf(owner);
+			let amountScaled = depositAmount.multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
+			let adminBalanceAfter = await SampleToken1.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken1.balanceOf(Holdefi.address);
 
-	// 		assert.equal(debtAfter.toString(), debtBefore.toString(),'Debt should not be changed')
-	// 		assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).toString(), 'Admin Balance increased correctly'); 
-	// 		assert.equal(
-	// 			roundNumber(convertReserve(reserveAfter), SampleToken1.decimals()).toString(),
-	// 			roundNumber(convertReserve(bigNumber(reserveBefore).plus(amountScaled)), SampleToken1.decimals()).toString(),
-	// 			"Promotion reserve should be increased"
-	// 		);
-	// 	})
+			assert.equal(debtAfter.toString(), debtBefore.toString(),'Market debt not changed')
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).toString(), 'Owner wallet balance decreased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).plus(depositAmount).toString(), 'Holdefi contract balance increased');  
+			assert.equal(reserveAfter.toString(), bigNumber(reserveBefore).plus(amountScaled).toString(),	"Promotion reserve increased");
+		})
 
-	// 	it('Fail if market is eth address',async () =>{
-	// 		await expectRevert(Holdefi.methods['depositPromotionReserve(address,uint256)'](ethAddress, decimal18.multipliedBy(1)),
-	// 			'Asset should not be ETH address');	
-	// 	})
-	// })
+		it('Fail if depositPromotionReserve function is paused',async () =>{
+			await Holdefi.pause("depositPromotionReserve", time.duration.days(30), {from: owner});
+			await time.increase(time.duration.days(29));
+			let depositAmount = await convertToDecimals(SampleToken1, 10);
+			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
+			await expectRevert(Holdefi.methods['depositPromotionReserve(address,uint256)'](SampleToken1.address, depositAmount), 'POE02');
+		})
 
-	// describe("Deposit Promotion Reserve for ETH", async() =>{
-	// 	beforeEach(async () =>{
-	// 		await scenario(owner,user1,user2,user3,user4);
-	// 		await time.increase(time.duration.days(5));
-	// 		await HoldefiSettings.setPromotionRate(ethAddress, ratesDecimal.multipliedBy(0.1))
-	// 		adminBalanceBefore = await balance.current(owner);
-	// 	})
+		it('Fail if market is not active',async () =>{
+			let depositAmount = await convertToDecimals(SampleToken1, 10);
+			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
+			await expectRevert(Holdefi.methods['depositPromotionReserve(address,uint256)'](SampleToken1.address, depositAmount), 'E02');
+		})
+
+		it('Fail if try to call depositPromotionReserve for ETH',async () =>{
+			await expectRevert(Holdefi.methods['depositPromotionReserve(address,uint256)'](ethAddress, decimal18.multipliedBy(1)), 'E01');
+		})
+	})
+
+	describe("Deposit promotion reserve for Deflating ERC20", async() =>{
+		beforeEach(async () =>{
+			await scenario(owner,user1,user2,user3,user4);
+			await assignToken(owner, owner, SampleToken5);
+			await time.increase(time.duration.days(5));
+			await HoldefiSettings.setPromotionRate(SampleToken5.address, ratesDecimal.multipliedBy(0.1));
+			await time.increase(time.duration.days(5));
+			await Holdefi.beforeChangeSupplyRate(SampleToken5.address);
+			adminBalanceBefore = await SampleToken5.balanceOf(owner);
+			contractBalanceBefore = await SampleToken5.balanceOf(Holdefi.address);
+		})
+
+		it('Promotion reserve should be increased after calling depositPromotionReserve',async () =>{
+			let depositAmount = await convertToDecimals(SampleToken5, 10);
+			let receivedAmount = depositAmount.minus(depositAmount.dividedToIntegerBy(100));  
+			let reserveBefore = (await Holdefi.marketAssets(SampleToken5.address)).promotionReserveScaled;
+			let debtBefore = await Holdefi.getPromotionDebt(SampleToken5.address);
+			await Holdefi.methods['depositPromotionReserve(address,uint256)'](SampleToken5.address, depositAmount);		
+			let reserveAfter = (await Holdefi.marketAssets(SampleToken5.address)).promotionReserveScaled;
+			let debtAfter = await Holdefi.getPromotionDebt(SampleToken5.address);
+
+			let amountScaled = receivedAmount.multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
+			let adminBalanceAfter = await SampleToken5.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken5.balanceOf(Holdefi.address);
+
+			assert.equal(debtAfter.toString(), debtBefore.toString(),'Market debt not changed')
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).toString(), 'Owner wallet balance decreased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).plus(receivedAmount).toString(), 'Holdefi contract balance increased');  
+			assert.equal(reserveAfter.toString(), bigNumber(reserveBefore).plus(amountScaled).toString(),	"Promotion reserve increased");
+		})
+	})
+
+	describe("Deposit promotion reserve for ETH", async() =>{
+		beforeEach(async () =>{
+			await scenario(owner,user1,user2,user3,user4);
+			await time.increase(time.duration.days(5));
+			await HoldefiSettings.setPromotionRate(ethAddress, ratesDecimal.multipliedBy(0.1))
+			await time.increase(time.duration.days(5));
+			await Holdefi.beforeChangeSupplyRate(ethAddress);
+			adminBalanceBefore = await balance.current(owner);
+			contractBalanceBefore = await balance.current(Holdefi.address);
+		})
 		
-	// 	it('Should Deposit reserves',async () =>{
-	// 		let depositAmount = decimal18.multipliedBy(1);
-	// 		await time.advanceBlock();
-	// 		let reserveBefore = (await Holdefi.getPromotionReserve(ethAddress)).promotionReserveScaled;
-	// 		let debtBefore = (await Holdefi.getPromotionDebt(ethAddress)).promotionDebtScaled;
-	// 		let tx = await Holdefi.methods['depositPromotionReserve()']({value:depositAmount});			
-	// 		let reserveAfter = (await Holdefi.getPromotionReserve(ethAddress)).promotionReserveScaled;
-	// 		let debtAfter = (await Holdefi.getPromotionDebt(ethAddress)).promotionDebtScaled;
+		it('Promotion reserve should be increased after calling depositPromotionReserve',async () =>{
+			let depositAmount = decimal18.multipliedBy(1);
+			await time.advanceBlock();
+			let reserveBefore = (await Holdefi.marketAssets(ethAddress)).promotionReserveScaled;
+			let debtBefore = await Holdefi.getPromotionDebt(ethAddress);
+			let tx = await Holdefi.methods['depositPromotionReserve()']({value:depositAmount});			
+			let reserveAfter = (await Holdefi.marketAssets(ethAddress)).promotionReserveScaled;
+			let debtAfter = await Holdefi.getPromotionDebt(ethAddress);
 
-	// 		let amountScaled = depositAmount.multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
-	// 		let adminBalanceAfter = await balance.current(owner);
+			let amountScaled = depositAmount.multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
+			let adminBalanceAfter = await balance.current(owner);
+			let contractBalanceAfter = await balance.current(Holdefi.address);
 
-	// 		let txFee = gasPrice.multipliedBy(tx.receipt.gasUsed);
-	// 		assert.equal(debtAfter.toString(), debtBefore.toString(),'Debt should not be changed')
-	// 		assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).minus(txFee).toString(), 'Admin Balance increased correctly'); 
-	// 		assert.equal(
-	// 			roundNumber(convertReserve(reserveAfter), 18).toString(),
-	// 			roundNumber(convertReserve(bigNumber(reserveBefore).plus(amountScaled)), 18).toString(),
-	// 			"promotion reserve increased"
-	// 		);
-			 
-	// 	})
-	// })
+			let txFee = gasPrice.multipliedBy(tx.receipt.gasUsed);
+			assert.equal(debtAfter.toString(), debtBefore.toString(),'Market debt not changed');
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).minus(txFee).toString(), 
+				'Owner wallet balance decreased'); 
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).plus(depositAmount).toString(), 'Holdefi contract balance increased');  
+			assert.equal(reserveAfter.toString(), bigNumber(reserveBefore).plus(amountScaled).toString(), "Promotion reserve increased"); 
+		})
 
-	// describe("Withdraw Promotion Reserve", async() =>{
-	// 	beforeEach(async () =>{
-	// 		await scenario(owner,user1,user2,user3,user4);
-	// 		await time.increase(time.duration.days(40));
-	// 		await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.01));
-	// 		adminBalanceBefore = await SampleToken1.balanceOf(owner);
-	// 		await time.increase(time.duration.days(1));
-	// 	})
+		it('Fail if depositPromotionReserve function is paused',async () =>{
+			await Holdefi.pause("depositPromotionReserve", time.duration.days(30), {from: owner});
+			await time.increase(time.duration.days(29));
+			let depositAmount = decimal18.multipliedBy(1);
+			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
+			await expectRevert(Holdefi.methods['depositPromotionReserve()']({value:depositAmount}), 'POE02');
+		})
+
+		it('Fail if market is not active',async () =>{
+			let depositAmount = decimal18.multipliedBy(1);
+			await HoldefiSettings.deactivateMarket(ethAddress,{from:owner});
+			await expectRevert(Holdefi.methods['depositPromotionReserve()']({value:depositAmount}), 'E02');
+		})
+	})
+
+	describe("Withdraw promotion reserve", async() =>{
+		beforeEach(async () =>{
+			await scenario(owner,user1,user2,user3,user4);
+			await Holdefi.methods['collateralize()']({from:user5, value: decimal18.multipliedBy(1)});
+			await Holdefi.borrow(SampleToken1.address, ethAddress, await convertToDecimals(SampleToken1, 5), referralCode, {from: user5});
+			await time.increase(time.duration.days(40));
+			await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.01));
+			adminBalanceBefore = await SampleToken1.balanceOf(owner);
+			contractBalanceBefore = await SampleToken1.balanceOf(Holdefi.address);
+			await time.increase(time.duration.days(1));
+		})
 		
-	// 	it('Should withdraw reserves',async () =>{
-	// 		let withdrawAmount = 10;
-	// 		await time.advanceBlock();
-	// 		let reserveBefore = (await Holdefi.getPromotionReserve(ethAddress)).promotionReserveScaled;
-	// 		let debtBefore = (await Holdefi.getPromotionDebt(ethAddress)).promotionDebtScaled;
-	// 		await Holdefi.withdrawPromotionReserve(SampleToken1.address, withdrawAmount);
-	// 		let reserveAfter = (await Holdefi.getPromotionReserve(ethAddress)).promotionReserveScaled;
-	// 		let debtAfter = (await Holdefi.getPromotionDebt(ethAddress)).promotionDebtScaled;
+		it('Promotion reserve should be decreased after calling withdrawPromotionReserve',async () =>{
+			let withdrawAmount = 10;
+			await time.advanceBlock();
+			let reserveBefore = await Holdefi.getPromotionReserve(SampleToken1.address);
+			let debtBefore = await Holdefi.getPromotionDebt(SampleToken1.address);
+			await Holdefi.withdrawPromotionReserve(SampleToken1.address, withdrawAmount);
+			let reserveAfter = await Holdefi.getPromotionReserve(SampleToken1.address);
+			let debtAfter = await Holdefi.getPromotionDebt(SampleToken1.address);
 
-	// 		let amountScaled = bigNumber(withdrawAmount).multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
-	// 		let adminBalanceAfter = await SampleToken1.balanceOf(owner);
+			let amountScaled = bigNumber(withdrawAmount).multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
+			let adminBalanceAfter = await SampleToken1.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken1.balanceOf(Holdefi.address);
 
-	// 		assert.equal(adminBalanceBefore.toString(), bigNumber(adminBalanceAfter).minus(withdrawAmount).toString(), 'Admin Balance increased correctly');
-	// 		assert.equal(
-	// 			roundNumber(convertReserve(reserveAfter).toString(), 18), 
-	// 			roundNumber(convertReserve(bigNumber(reserveBefore).minus(debtBefore).minus(amountScaled)), 18).toString(), 
-	// 			"Reserve withdrawn"
-	// 		);
-	// 	})
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).plus(withdrawAmount).toString(), 'Owner wallet balance increased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).minus(withdrawAmount).toString(), 
+				'Holdefi contract balance decreased');  
+			assert.equal(roundNumber(convertReserve(reserveAfter), SampleToken1.decimals()/2).toString(), 
+				roundNumber(convertReserve(bigNumber(reserveBefore).minus(amountScaled)), SampleToken1.decimals()/2).toString(), 
+				"Promotion reserve decreased");
+		})
 
-	// 	it('Fail if debt is more than reserve',async () =>{
-	// 		await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1));
-	// 		await time.increase(time.duration.days(100));
-	// 		await expectRevert(Holdefi.withdrawPromotionReserve(SampleToken1.address, decimal18.multipliedBy(10), {from: owner}),
-	// 			"Amount should be less than max");
-	// 	})
+		it('Fail if promotionDebtScaled > promotionReserveScaled',async () =>{
+			await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1));
+			await time.increase(time.duration.days(100));
+			await expectRevert(Holdefi.withdrawPromotionReserve(SampleToken1.address, decimal18.multipliedBy(10), {from: owner}),
+				"E07");
+		})
 
-	// 	it('Fail if amount more than max',async () =>{
-	// 		await expectRevert(Holdefi.withdrawPromotionReserve(SampleToken1.address, decimal18.multipliedBy(1000), {from: owner}),
-	// 			"Amount should be less than max");
-	// 	})
+		it('Fail if withdraw amount is more than Max',async () =>{
+			await expectRevert(Holdefi.withdrawPromotionReserve(SampleToken1.address, decimal18.multipliedBy(1000), {from: owner}),
+				"E07");
+		})
 
-	// 	it('Fail if called by other accounts',async () =>{
-	// 		await expectRevert(Holdefi.withdrawPromotionReserve(SampleToken1.address, 10, {from: user1}),
-	// 			"Sender should be owner");
-	// 	})
-	// })
+		it('Fail if a non-owner account calls withdrawPromotionReserve',async () =>{
+			await expectRevert(Holdefi.withdrawPromotionReserve(SampleToken1.address, 10, {from: user1}),
+				"OE01");
+		})
+	})
 
-	// describe("Reset promotion rate", async() =>{
-	// 	beforeEach(async () =>{
-	// 		await scenario(owner,user1,user2,user3,user4);
-	// 	})
+	describe("Withdraw promotion reserve for Deflating ERC20", async() =>{
+		beforeEach(async () =>{
+			await scenario(owner,user1,user2,user3,user4);
+			await Holdefi.methods['collateralize()']({from:user5, value: decimal18.multipliedBy(1)});
+			await Holdefi.borrow(SampleToken5.address, ethAddress, await convertToDecimals(SampleToken5, 5), referralCode, {from: user5});
+			await time.increase(time.duration.days(40));
+			await HoldefiSettings.setPromotionRate(SampleToken5.address, ratesDecimal.multipliedBy(0.01));
+			adminBalanceBefore = await SampleToken5.balanceOf(owner);
+			contractBalanceBefore = await SampleToken5.balanceOf(Holdefi.address);
+			await time.increase(time.duration.days(1));
+		})
+		
+		it('Promotion reserve should be decreased after calling withdrawPromotionReserve',async () =>{
+			let withdrawAmount = bigNumber(10);
+			let receivedAmount = withdrawAmount.minus(withdrawAmount.dividedToIntegerBy(100));  
+			await time.advanceBlock();
+			let reserveBefore = await Holdefi.getPromotionReserve(SampleToken5.address);
+			let debtBefore = await Holdefi.getPromotionDebt(SampleToken5.address);
+			await Holdefi.withdrawPromotionReserve(SampleToken5.address, withdrawAmount);
+			let reserveAfter = await Holdefi.getPromotionReserve(SampleToken5.address);
+			let debtAfter = await Holdefi.getPromotionDebt(SampleToken5.address);
 
-	// 	it('Fail if reset promotion by other accounts', async () => {
-	// 		await HoldefiSettings.setPromotionRate(SampleToken1.address, ratesDecimal.multipliedBy(0.1),{from: owner});
-	// 		await expectRevert(HoldefiSettings.resetPromotionRate(SampleToken1.address, {from: user1}),
-	// 			'Sender is not Holdefi contract');
-	// 	})
+			let amountScaled = bigNumber(withdrawAmount).multipliedBy(secondsPerYear).multipliedBy(ratesDecimal);	
+			let adminBalanceAfter = await SampleToken5.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken5.balanceOf(Holdefi.address);
 
-	// })
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).plus(receivedAmount).toString(), 'Owner wallet balance increased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).minus(withdrawAmount).toString(), 
+				'Holdefi contract balance decreased');  
+			assert.equal(roundNumber(convertReserve(reserveAfter), SampleToken5.decimals()/2).toString(), 
+				roundNumber(convertReserve(bigNumber(reserveBefore).minus(amountScaled)), SampleToken5.decimals()/2).toString(), 
+				"Promotion reserve decreased");
+		})
+	})
 	
-	// describe("Deposit liquidation reserves", async() =>{
-	// 	beforeEach(async () => {
-	// 		await scenario(owner,user1, user2, user3, user4);
-	// 	})
-
-	// 	it('Should deposit liquidation reserves', async () => {
-	// 		let depositAmount = await convertToDecimals(SampleToken1, 10);
-	// 		let totalLiquidatedCollateralBefore = await Holdefi.collateralAssets(SampleToken1.address);
-	// 		await Holdefi.depositLiquidationReserve(SampleToken1.address, depositAmount, {from: user2});
-	// 		let totalLiquidatedCollateralAfter = await Holdefi.collateralAssets(SampleToken1.address);
-	// 		assert.equal(totalLiquidatedCollateralAfter.totalLiquidatedCollateral.toString(), bigNumber(totalLiquidatedCollateralBefore.totalLiquidatedCollateral).plus(depositAmount).toString());
-	// 	}) 		
-
-	// 	it('Fail if asset is ETH', async () => {
-	// 		await expectRevert(Holdefi.depositLiquidationReserve(ethAddress, decimal18.multipliedBy(1), {from: user2}),
-	// 			"Asset should not be ETH address");
-	// 	}) 
-	// })
-
-	describe("Withdraw liquidation reserves", async() =>{
+	describe("Deposit liquidation reserve for ERC20", async() =>{
 		beforeEach(async () => {
 			await scenario(owner,user1, user2, user3, user4);
+			HoldefiCollateralsAddress = await Holdefi.holdefiCollaterals.call();
+			adminBalanceBefore = await SampleToken1.balanceOf(user2);
+			contractBalanceBefore = await SampleToken1.balanceOf(HoldefiCollateralsAddress);
+		})
+
+		it('Liquidation reserves should increased after calling depositLiquidationReserve', async () => {
+			let depositAmount = await convertToDecimals(SampleToken1, 10);
+			let totalLiquidatedCollateralBefore = await Holdefi.collateralAssets(SampleToken1.address);
+			await Holdefi.depositLiquidationReserve(SampleToken1.address, depositAmount, {from: user2});
+			let totalLiquidatedCollateralAfter = await Holdefi.collateralAssets(SampleToken1.address);
+
+			let adminBalanceAfter = await SampleToken1.balanceOf(user2);
+			let contractBalanceAfter = await SampleToken1.balanceOf(HoldefiCollateralsAddress);
+
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).toString(), 'Owner wallet balance decreased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).plus(depositAmount).toString(), 'Holdefi contract balance increased');  
+			assert.equal(
+				totalLiquidatedCollateralAfter.totalLiquidatedCollateral.toString(), 
+				bigNumber(totalLiquidatedCollateralBefore.totalLiquidatedCollateral).plus(depositAmount).toString(),
+				'Liquidation reserve increased'
+			);
+		});
+
+		it('Fail if depositLiquidationReserve function is paused',async () =>{
+			await Holdefi.pause("depositLiquidationReserve", time.duration.days(30), {from: owner});
+			await time.increase(time.duration.days(29));
+			let depositAmount = await convertToDecimals(SampleToken1, 10);
+			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
+			await expectRevert(Holdefi.depositLiquidationReserve(SampleToken1.address, depositAmount, {from: user2}), 'POE02');
+		})
+
+		it('Fail if collateral is not active',async () =>{
+			let depositAmount = await convertToDecimals(SampleToken1, 10);
+			await HoldefiSettings.deactivateCollateral(SampleToken1.address,{from:owner});
+			await expectRevert(Holdefi.depositLiquidationReserve(SampleToken1.address, depositAmount, {from: user2}), 'E03');
+		})	
+
+		it('Fail if try to call depositLiquidationReserve for ETH', async () => {
+			await expectRevert(Holdefi.depositLiquidationReserve(ethAddress, decimal18.multipliedBy(1), {from: user2}),
+				"E01");
+		}) 
+	})
+
+	describe("Deposit liquidation reserve for Deflating ERC20", async() =>{
+		beforeEach(async () => {
+			await scenario(owner,user1, user2, user3, user4);
+			HoldefiCollateralsAddress = await Holdefi.holdefiCollaterals.call();
+			adminBalanceBefore = await SampleToken5.balanceOf(user2);
+			contractBalanceBefore = await SampleToken5.balanceOf(HoldefiCollateralsAddress);
+		})
+
+		it('Liquidation reserves should increased after calling depositLiquidationReserve', async () => {
+			let depositAmount = await convertToDecimals(SampleToken5, 10);
+			let receivedAmount = depositAmount.minus(depositAmount.dividedToIntegerBy(100));  
+			let totalLiquidatedCollateralBefore = await Holdefi.collateralAssets(SampleToken5.address);
+			await Holdefi.depositLiquidationReserve(SampleToken5.address, depositAmount, {from: user2});
+			let totalLiquidatedCollateralAfter = await Holdefi.collateralAssets(SampleToken5.address);
+
+			let adminBalanceAfter = await SampleToken5.balanceOf(user2);
+			let contractBalanceAfter = await SampleToken5.balanceOf(HoldefiCollateralsAddress);
+
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).toString(), 'Owner wallet balance decreased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).plus(receivedAmount).toString(), 'HoldefiCollaterals contract balance increased');  
+			assert.equal(
+				totalLiquidatedCollateralAfter.totalLiquidatedCollateral.toString(), 
+				bigNumber(totalLiquidatedCollateralBefore.totalLiquidatedCollateral).plus(receivedAmount).toString(),
+				'Liquidation reserve increased'
+			);
+		})
+	})
+
+	describe("Deposit liquidation reserve for ETH", async() =>{
+		beforeEach(async () => {
+			await scenario(owner,user1, user2, user3, user4);
+			HoldefiCollateralsAddress = await Holdefi.holdefiCollaterals.call();
+			adminBalanceBefore = await balance.current(owner);
+			contractBalanceBefore = await balance.current(HoldefiCollateralsAddress);
+		})
+
+		it('Liquidation reserves should increased after calling depositLiquidationReserve', async () => {
+			let depositAmount = decimal18.multipliedBy(1);
+			let totalLiquidatedCollateralBefore = await Holdefi.collateralAssets(ethAddress);
+			let tx = await Holdefi.methods['depositLiquidationReserve()']({value:depositAmount});	
+			let totalLiquidatedCollateralAfter = await Holdefi.collateralAssets(ethAddress);
+
+			let adminBalanceAfter = await balance.current(owner);
+			let contractBalanceAfter = await balance.current(HoldefiCollateralsAddress);
+			let txFee = gasPrice.multipliedBy(tx.receipt.gasUsed);
+
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).minus(depositAmount).minus(txFee).toString(), 'Owner wallet balance decreased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).plus(depositAmount).toString(), 'HoldefiCollaterals contract balance increased');  
+			assert.equal(
+				totalLiquidatedCollateralAfter.totalLiquidatedCollateral.toString(), 
+				bigNumber(totalLiquidatedCollateralBefore.totalLiquidatedCollateral).plus(depositAmount).toString(),
+				'Liquidation reserve increased'
+			);
+		})
+
+		it('Fail if depositLiquidationReserve function is paused',async () =>{
+			await Holdefi.pause("depositLiquidationReserve", time.duration.days(30), {from: owner});
+			await time.increase(time.duration.days(29));
+			let depositAmount = decimal18.multipliedBy(1);
+			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
+			await expectRevert(Holdefi.methods['depositLiquidationReserve()']({value:depositAmount}), 'POE02');
+		})
+
+		it('Fail if collateral is not active',async () =>{
+			let depositAmount = decimal18.multipliedBy(1);
+			await HoldefiSettings.deactivateCollateral(ethAddress,{from:owner});
+			await expectRevert(Holdefi.methods['depositLiquidationReserve()']({value:depositAmount}), 'E03');
+		})	
+	})
+
+	describe("Withdraw liquidation reserve", async() =>{
+		beforeEach(async () => {
+			await scenario(owner,user1, user2, user3, user4);
+			HoldefiCollateralsAddress = await Holdefi.holdefiCollaterals.call();
 			await assignToken(owner, user5, SampleToken1);
-			await Holdefi.methods['supply(uint16)'](referalCode, {from:user1, value: decimal18.multipliedBy(1)});	        
+			await Holdefi.methods['supply(uint16)'](referralCode, {from:user1, value: decimal18.multipliedBy(1)});	        
 			await Holdefi.methods['collateralize(address,uint256)'](SampleToken1.address, await convertToDecimals(SampleToken1, 20), {from:user5});
-			await Holdefi.borrow(ethAddress, SampleToken1.address, decimal18.multipliedBy(0.65), referalCode, {from: user5});
+			await Holdefi.borrow(ethAddress, SampleToken1.address, decimal18.multipliedBy(0.65), referralCode, {from: user5});
 			
 			await SampleToken1PriceAggregator.setPrice(await convertToDecimals(SampleToken1PriceAggregator, 9/200));   
 			await Holdefi.liquidateBorrowerCollateral(user5, ethAddress, SampleToken1.address);
@@ -254,20 +448,26 @@ contract("Test Admin functions", function([owner,user1,user2,user3,user4,user5,u
 			await time.increase(time.duration.days(1));
 		})
 
-		it('Should withdraw liquidation reserves', async () => {
+		it('Liquidation reserves should decreased after calling withdrawLiquidationReserve', async () => {
+			let contractBalanceBefore = await SampleToken1.balanceOf(HoldefiCollateralsAddress);
 			let getLiquidationReserveBefore = await Holdefi.getLiquidationReserve(SampleToken1.address);
 			await Holdefi.withdrawLiquidationReserve(SampleToken1.address, getLiquidationReserveBefore);
 			let getLiquidationReserveAfter = await Holdefi.getLiquidationReserve(SampleToken1.address); 
 			let adminBalanceAfter = await SampleToken1.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken1.balanceOf(HoldefiCollateralsAddress);
 
-			assert.equal(adminBalanceBefore.toString(), bigNumber(adminBalanceAfter).minus(getLiquidationReserveBefore).toString(), 'Admin Balance increased correctly');   
-			assert.equal(getLiquidationReserveAfter.toString(), 0, "Reserve withdrawn")
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).plus(getLiquidationReserveBefore).toString(), 
+				'Owner wallet balance increased');   
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).minus(getLiquidationReserveBefore).toString(), 
+				'HoldefiCollaterals contract balance decreased');
+			assert.equal(getLiquidationReserveAfter.toString(), 0, "Liquidation reserve decreased")
 		})
 
-		it('Should withdraw all liquidatedCollateral if no debt', async () => {
+		it('Should withdraw all liquidatedCollateral if there is no marketDebt', async () => {
 			let marketDebtBefore = await Holdefi.marketDebt(SampleToken1.address, ethAddress);
 			await Holdefi.methods['buyLiquidatedCollateral(address)'](SampleToken1.address,  {from: user6 , value: marketDebtBefore});
 		
+			let contractBalanceBefore = await SampleToken1.balanceOf(HoldefiCollateralsAddress);
 			let getLiquidatedCollateralBefore = (await Holdefi.collateralAssets(SampleToken1.address)).totalLiquidatedCollateral;    
 			let getLiquidationReserveBefore = await Holdefi.getLiquidationReserve(SampleToken1.address);
 			
@@ -275,190 +475,76 @@ contract("Test Admin functions", function([owner,user1,user2,user3,user4,user5,u
 			let getLiquidationReserveAfter = await Holdefi.getLiquidationReserve(SampleToken1.address);
 			let getLiquidatedCollateralAfter = (await Holdefi.collateralAssets(SampleToken1.address)).totalLiquidatedCollateral;    
 			let adminBalanceAfter = await SampleToken1.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken1.balanceOf(HoldefiCollateralsAddress);
 			
-			assert.equal(adminBalanceBefore.toString(), bigNumber(adminBalanceAfter).minus(getLiquidationReserveBefore).toString(), 'Admin Balance increase correctly');
-			assert.equal(getLiquidatedCollateralBefore.toString(), getLiquidationReserveBefore.toString(),'Liquidated collateral and liquidation reserve are equal')
-			assert.equal(getLiquidatedCollateralAfter.toString(), 0,'No liquidated collateral')
-			assert.equal(getLiquidationReserveAfter.toString(), 0,'No liquidation reserve')
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).plus(getLiquidationReserveBefore).toString(), 
+				'Owner wallet balance increased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).minus(getLiquidationReserveBefore).toString(), 
+				'HoldefiCollaterals contract balance decreased');
+			assert.equal(getLiquidatedCollateralBefore.toString(), getLiquidationReserveBefore.toString(),'Liquidated collateral = Liquidation reserve (before calling withdrawLiquidationReserve)')
+			assert.equal(getLiquidatedCollateralAfter.toString(), 0,'Liquidated collateral = 0 (after calling withdrawLiquidationReserve)')
+			assert.equal(getLiquidationReserveAfter.toString(), 0,'Liquidation reserve = 0 (after calling withdrawLiquidationReserve)')
 		})
 
-		it('Fail if withdraw collateral reserves by other accounts ', async () => {
+		it('Fail if a non-owner account calls withdrawLiquidationReserve', async () => {
 			let getLiquidatedCollateral = (await Holdefi.collateralAssets(SampleToken1.address)).totalLiquidatedCollateral;             	        
 			await expectRevert(Holdefi.withdrawLiquidationReserve(SampleToken1.address, getLiquidatedCollateral,{from: user1}),
-				'Sender should be owner')
+				'OE01')
 		})
 	})
 
-// 	describe("Activation assets", async() =>{
-// 		beforeEach(async () => {
-// 			await scenario(owner,user1, user2, user3, user4);
-// 		})
+	describe("Withdraw liquidation reserve for Deflating ERC20", async() =>{
+		beforeEach(async () => {
+			await scenario(owner,user1, user2, user3, user4);
+			HoldefiCollateralsAddress = await Holdefi.holdefiCollaterals.call();
+			await assignToken(owner, user5, SampleToken5);
+			await Holdefi.methods['supply(uint16)'](referralCode, {from:user1, value: decimal18.multipliedBy(1)});	        
+			await Holdefi.methods['collateralize(address,uint256)'](SampleToken5.address, await convertToDecimals(SampleToken5, 200), {from:user5});
+			await Holdefi.borrow(ethAddress, SampleToken5.address, decimal18.multipliedBy(0.65), referralCode, {from: user5});
+			
+			await SampleToken5PriceAggregator.setPrice(await convertToDecimals(SampleToken5PriceAggregator, 1/250));   
+			await Holdefi.liquidateBorrowerCollateral(user5, ethAddress, SampleToken5.address);
+			adminBalanceBefore = await SampleToken5.balanceOf(owner);
+			await time.increase(time.duration.days(1));
+		})
 
-// 		it('Should deactive market if market is active',async () =>{
-// 			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isFalse(activate.isActive);
-// 		})		
+		it('Liquidation reserves should decreased after calling withdrawLiquidationReserve', async () => {
+			let contractBalanceBefore = await SampleToken5.balanceOf(HoldefiCollateralsAddress);
+			let getLiquidationReserveBefore = bigNumber(await Holdefi.getLiquidationReserve(SampleToken5.address));
+			let receivedAmount = getLiquidationReserveBefore.minus(getLiquidationReserveBefore.dividedToIntegerBy(100));  
+			await Holdefi.withdrawLiquidationReserve(SampleToken5.address, getLiquidationReserveBefore);
+			let getLiquidationReserveAfter = await Holdefi.getLiquidationReserve(SampleToken5.address); 
+			let adminBalanceAfter = await SampleToken5.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken5.balanceOf(HoldefiCollateralsAddress);
 
-// 		it('Should active market if market is deactive',async () =>{
-// 			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.activateMarket(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isActive);
-// 		})
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).plus(receivedAmount).toString(), 
+				'Owner wallet balance increased');   
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).minus(getLiquidationReserveBefore).toString(), 
+				'HoldefiCollaterals contract balance decreased');
+			assert.equal(getLiquidationReserveAfter.toString(), 0, "Liquidation reserve decreased")
+		})
 
-// 		it('Should deactive collateral if collateral is active',async () =>{
-// 			await HoldefiSettings.deactivateCollateral(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.collateralAssets(SampleToken1.address);
-// 	 		assert.isFalse(activate.isActive);
-// 		})	
-
-// 		it('Should deactive collateral if collateral is active',async () =>{
-// 			await HoldefiSettings.deactivateCollateral(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.activateCollateral(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.collateralAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isActive);
-// 		})			
-
-// 		it('Should deactive market if market is deactive',async () =>{
-// 			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isFalse(activate.isActive);
-// 		})		
-
-// 		it('Should active market if market is active',async () =>{
-// 			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.activateMarket(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.activateMarket(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isActive);
-// 		})
-
-// 		it('Should deactive collateral if collateral is deactive',async () =>{
-// 			await HoldefiSettings.deactivateCollateral(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.deactivateCollateral(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.collateralAssets(SampleToken1.address);
-// 	 		assert.isFalse(activate.isActive);
-// 		})	
-
-// 		it('Should active collateral if collateral is active',async () =>{
-// 			await HoldefiSettings.deactivateCollateral(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.activateCollateral(SampleToken1.address,{from:owner});
-// 			await HoldefiSettings.activateCollateral(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.collateralAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isActive);
-// 		})	
-
-// 		it('Should deactive market if market is active',async () =>{
-// 			await HoldefiSettings.deactivateMarket(SampleToken1.address,{from:owner});
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isFalse(activate.isActive);
-// 		})
-
-// 		it('Fail active market if market is not exist',async () =>{
-// 			await expectRevert(HoldefiSettings.activateMarket(SampleToken4.address,{from:owner}),
-// 				'The market is not exist');
-// 		})			
-
-// 		it('Fail deactive market if market is not exist',async () =>{
-// 			await expectRevert(HoldefiSettings.deactivateMarket(SampleToken4.address,{from:owner}),
-// 				'The market is not exist');
-// 		})	
-
-// 		it('Fail active collateral if market is not exist',async () =>{
-// 			await expectRevert(HoldefiSettings.activateCollateral(SampleToken4.address,{from:owner}),
-// 				'The collateral is not exist');
-// 		})			
-
-// 		it('Fail deactive collateral if market is not exist',async () =>{
-// 			await expectRevert(HoldefiSettings.deactivateCollateral(SampleToken4.address,{from:owner}),
-// 				'The collateral is not exist');
-// 		})		
-// })
-
-// 	describe("add or remove assets", async() =>{
-// 		beforeEach(async () => {
-// 			await scenario(owner,user1, user2, user3, user4);
-// 		})
-
-// 		it('Should add new market asset',async () =>{
-// 			await HoldefiSettings.addMarket(SampleToken2.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.9) ,{from:owner});
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isExist);
-// 		})				
-
-// 		it('Should add new collateral asset',async () =>{
-// 			await HoldefiSettings.addCollateral(SampleToken2.address, ratesDecimal.multipliedBy(1.5), ratesDecimal.multipliedBy(1.2),ratesDecimal.multipliedBy(1.05),{from:owner});
-// 			let activate = await HoldefiSettings.collateralAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isExist);
-// 		})			
-
-// 		it('Should remove market asset',async () =>{
-// 			await HoldefiSettings.addMarket(SampleToken2.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.9) ,{from:owner});
-// 			await HoldefiSettings.removeMarket(SampleToken2.address ,{from:owner});
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken2.address);
-// 	 		assert.isFalse(activate.isExist);
-// 		})	
-
-// 		it('Fail add if market asset added before',async () =>{
-// 			await expectRevert(HoldefiSettings.addMarket(SampleToken1.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.9) ,{from:owner}),
-// 			"The market is exist");
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isExist);
-// 		})						
-
-// 		it('Fail add if collateral asset added before',async () =>{
-// 			await expectRevert(HoldefiSettings.addCollateral(SampleToken1.address,  ratesDecimal.multipliedBy(1.5), ratesDecimal.multipliedBy(1.2),ratesDecimal.multipliedBy(1.05),{from:owner}),
-// 			"The collateral is exist");
-// 			let activate = await HoldefiSettings.collateralAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isExist);
-// 		})	
-
-// 		it('Fail remove if market asset removed before',async () =>{
-// 			await HoldefiSettings.addMarket(SampleToken2.address, ratesDecimal.multipliedBy(0.1), ratesDecimal.multipliedBy(0.9) ,{from:owner});
-// 			await HoldefiSettings.removeMarket(SampleToken2.address ,{from:owner});
-// 			await expectRevert(HoldefiSettings.removeMarket(SampleToken2.address, {from:owner}),
-// 			"The market is not exist");
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken2.address);
-// 	 		assert.isFalse(activate.isExist);
-// 		})			
-
-// 		it('Fail remove market if total borrow is not zero',async () =>{
-// 			await expectRevert(HoldefiSettings.removeMarket(SampleToken1.address, {from:owner}),
-// 			"Total borrow is not zero");
-// 			let activate = await HoldefiSettings.marketAssets(SampleToken1.address);
-// 	 		assert.isTrue(activate.isExist);
-// 		})			
-// 	})
-// 	describe("set rates", async() =>{
-// 		beforeEach(async () =>{
-// 			await scenario(owner,user1,user2,user3,user4);
-// 		})
-
-// 		it('Fail if market is not exists on set borrow rate',async () =>{
-// 			await expectRevert(HoldefiSettings.setBorrowRate(SampleToken4.address, ratesDecimal.multipliedBy(0.1), {from:owner}),
-// 					"The market is not exist");
-// 		})		
-
-// 		it('Fail if market is not exists on set suppliers share rate',async () =>{
-// 			await expectRevert(HoldefiSettings.setSuppliersShareRate(SampleToken4.address, ratesDecimal.multipliedBy(0.9), {from:owner}),
-// 					"The market is not exist");
-// 		})		
-
-// 		it('Fail if market is not exists on set VTL rate',async () =>{
-// 			await expectRevert(HoldefiSettings.setValueToLoanRate(SampleToken4.address, ratesDecimal.multipliedBy(1.5), {from:owner}),
-// 					"The collateral is not exist");
-// 		})		
-
-// 		it('Fail if market is not exists on set penalty rate',async () =>{
-// 			await expectRevert(HoldefiSettings.setPenaltyRate(SampleToken4.address, ratesDecimal.multipliedBy(1.2), {from:owner}),
-// 					"The collateral is not exist");
-// 		})		
-
-// 		it('Fail if market is not exists on set bonus rate',async () =>{
-// 			await expectRevert(HoldefiSettings.setBonusRate(SampleToken4.address, ratesDecimal.multipliedBy(1.05), {from:owner}),
-// 					"The collateral is not exist");
-		// })
-	// })
+		it('Should withdraw all liquidatedCollateral if there is no marketDebt', async () => {
+			let marketDebtBefore = await Holdefi.marketDebt(SampleToken5.address, ethAddress);
+			await Holdefi.methods['buyLiquidatedCollateral(address)'](SampleToken5.address,  {from: user6 , value: marketDebtBefore});
+		
+			let contractBalanceBefore = await SampleToken5.balanceOf(HoldefiCollateralsAddress);
+			let getLiquidatedCollateralBefore = (await Holdefi.collateralAssets(SampleToken5.address)).totalLiquidatedCollateral;    
+			let getLiquidationReserveBefore = bigNumber(await Holdefi.getLiquidationReserve(SampleToken5.address));
+			let receivedAmount = getLiquidationReserveBefore.minus(getLiquidationReserveBefore.dividedToIntegerBy(100));
+			await Holdefi.withdrawLiquidationReserve(SampleToken5.address, bigNumber(getLiquidationReserveBefore).multipliedBy(2));
+			let getLiquidationReserveAfter = await Holdefi.getLiquidationReserve(SampleToken5.address);
+			let getLiquidatedCollateralAfter = (await Holdefi.collateralAssets(SampleToken5.address)).totalLiquidatedCollateral;    
+			let adminBalanceAfter = await SampleToken5.balanceOf(owner);
+			let contractBalanceAfter = await SampleToken5.balanceOf(HoldefiCollateralsAddress);
+			
+			assert.equal(adminBalanceAfter.toString(), bigNumber(adminBalanceBefore).plus(receivedAmount).toString(), 
+				'Owner wallet balance increased');
+			assert.equal(contractBalanceAfter.toString(), bigNumber(contractBalanceBefore).minus(getLiquidationReserveBefore).toString(), 
+				'HoldefiCollaterals contract balance decreased');
+			assert.equal(getLiquidatedCollateralBefore.toString(), getLiquidationReserveBefore.toString(),'Liquidated collateral = Liquidation reserve (before calling withdrawLiquidationReserve)')
+			assert.equal(getLiquidatedCollateralAfter.toString(), 0,'Liquidated collateral = 0 (after calling withdrawLiquidationReserve)')
+			assert.equal(getLiquidationReserveAfter.toString(), 0,'Liquidation reserve = 0 (after calling withdrawLiquidationReserve)')
+		})
+	})
 })

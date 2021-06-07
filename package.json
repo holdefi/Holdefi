@@ -12,12 +12,11 @@
   "author": "Holdefi Team",
   "license": "ISC",
   "dependencies": {
-    "@chainlink/contracts": "0.0.9",
-    "@openzeppelin/contracts": "^3.1.0",
-    "bignumber.js": "^9.0.0",
-    "truffle-security": "^1.7.3"
+    "@chainlink/contracts": "0.1.7",
+    "@openzeppelin/contracts": "^3.1.0"
   },
   "devDependencies": {
-    "@openzeppelin/test-helpers": "^0.5.6"
+    "bignumber.js": "^9.0.1",
+    "@openzeppelin/test-helpers": "^0.5.10"
   }
 }

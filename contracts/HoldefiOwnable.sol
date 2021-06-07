@@ -14,6 +14,11 @@ pragma solidity 0.6.12;
 /// This module is used through inheritance. It will make available the modifier
 /// `onlyOwner`, which can be applied to your functions to restrict their use to
 /// the owner.
+/// @dev Error codes description: 
+///     OE01: Sender should be the owner
+///     OE02: New owner can not be zero address
+///     OE03: Pending owner is empty
+///     OE04: Pending owner is not same as the `msg.sender`
 contract HoldefiOwnable {
     address public owner;
     address public pendingOwner;
@@ -32,7 +37,7 @@ contract HoldefiOwnable {
 
     /// @notice Throws if called by any account other than the owner
     modifier onlyOwner() {
-        require(msg.sender == owner, "Sender should be owner");
+        require(msg.sender == owner, "OE01");
         _;
     }
 
@@ -40,7 +45,7 @@ contract HoldefiOwnable {
     /// @dev Can only be called by the current owner
     /// @param newOwner Address of new owner
     function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "New owner can not be zero address");
+        require(newOwner != address(0), "OE02");
         pendingOwner = newOwner;
 
         emit OwnershipTransferRequested(newOwner);
@@ -49,8 +54,8 @@ contract HoldefiOwnable {
     /// @notice Pending owner accepts ownership of the contract
     /// @dev Only Pending owner can call this function
     function acceptTransferOwnership () external {
-        require (pendingOwner != address(0), "Pending owner is empty");
-        require (pendingOwner == msg.sender, "Pending owner is not same as sender");
+        require (pendingOwner != address(0), "OE03");
+        require (pendingOwner == msg.sender, "OE04");
         
         emit OwnershipTransferred(pendingOwner, owner);
         owner = pendingOwner;

@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.6.12;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 
 /// @title HoldefiCollaterals
 /// @author Holdefi Team
 /// @notice Collaterals is held by this contract
 /// @dev The address of ETH asset considered as 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+/// @dev Error codes description: 
+/// 	CE01: Sender should be Holdefi contract
+/// 	CE02: Cannot transfer
 contract HoldefiCollaterals {
 
-	address constant public ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+	using SafeERC20 for IERC20;
+
+	address constant private ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
 	address public holdefiContract;
 
@@ -21,7 +26,7 @@ contract HoldefiCollaterals {
 
 	/// @notice Modifier to check that only Holdefi contract interacts with the function
     modifier onlyHoldefiContract() {
-        require (msg.sender == holdefiContract, "Sender should be holdefi contract");
+        require (msg.sender == holdefiContract, "CE01");
         _;
     }
 
@@ -37,15 +42,13 @@ contract HoldefiCollaterals {
 		external
 		onlyHoldefiContract
 	{
-		bool success = false;
 		if (collateral == ethAddress){
-			(success, ) = recipient.call{value:amount}("");
+			(bool success, ) = recipient.call{value:amount}("");
+			require (success, "CE02");
 		}
 		else {
 			IERC20 token = IERC20(collateral);
-			success = token.transfer(recipient, amount);
+			token.safeTransfer(recipient, amount);
 		}
-		require (success, "Cannot Transfer");
 	}
-
 }
